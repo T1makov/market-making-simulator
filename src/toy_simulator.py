@@ -1,5 +1,14 @@
 import random
 import math
+from pathlib import Path
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_DIR = PROJECT_ROOT / "results"
+PLOTS_DIR = RESULTS_DIR / "plots"
 
 
 def fill_probability(distance_from_true_mid):
@@ -55,7 +64,6 @@ def estimate_uncertainty(recent_observed_price_changes):
     """
     Estimates market uncertainty using recent observed price changes.
 
-    This is important:
     The bot does NOT know the true observation noise.
 
     Instead, it looks at how much the observed price has been moving recently.
@@ -116,9 +124,6 @@ def choose_effective_spread(
 
     Uncertainty-aware strategies:
         Widen the spread when estimated uncertainty is high.
-
-    Example:
-        effective_spread = base_spread + uncertainty_sensitivity * estimated_uncertainty
     """
 
     if strategy in ["fixed", "inventory_aware"]:
@@ -142,36 +147,6 @@ def run_simulation(
 ):
     """
     Runs one simulation of the market-making bot.
-
-    base_spread:
-        The starting bid-ask spread before any uncertainty adjustment.
-
-    num_steps:
-        Number of time steps in the simulation.
-
-    strategy:
-        Options:
-            "fixed"
-            "inventory_aware"
-            "uncertainty_aware"
-            "inventory_and_uncertainty_aware"
-
-    inventory_skew:
-        How strongly the inventory-aware strategy adjusts quote midpoint.
-
-    observation_noise_std:
-        Used by the simulator to create noisy observations.
-
-        The bot does NOT directly know this value.
-
-    risk_penalty:
-        How much we penalize average inventory exposure in the risk-adjusted score.
-
-    uncertainty_sensitivity:
-        How strongly the uncertainty-aware strategy widens spread.
-
-    volatility_window:
-        How many recent observed price changes the bot uses to estimate uncertainty.
     """
 
     initial_price = 100.00
@@ -198,7 +173,6 @@ def run_simulation(
         true_mid_price += price_change
 
         # 2. The bot observes the true price with noise.
-        # The bot sees observed_mid_price, but it does NOT know observation_noise.
         observation_noise = random.gauss(0.0, observation_noise_std)
         observed_mid_price = true_mid_price + observation_noise
 
@@ -209,7 +183,6 @@ def run_simulation(
             observed_price_change = observed_mid_price - previous_observed_mid_price
             recent_observed_price_changes.append(observed_price_change)
 
-            # Keep only the most recent changes.
             if len(recent_observed_price_changes) > volatility_window:
                 recent_observed_price_changes.pop(0)
 
@@ -227,8 +200,6 @@ def run_simulation(
         )
 
         # 6. Choose the spread.
-        # Uncertainty-aware strategies widen this spread when recent observed
-        # price changes are volatile.
         effective_spread = choose_effective_spread(
             strategy=strategy,
             base_spread=base_spread,
@@ -236,7 +207,7 @@ def run_simulation(
             uncertainty_sensitivity=uncertainty_sensitivity,
         )
 
-        # 7. The bot places bid and ask around its chosen quote midpoint.
+        # 7. Place bid and ask around the chosen quote midpoint.
         bid_price = quote_mid_price - effective_spread / 2
         ask_price = quote_mid_price + effective_spread / 2
 
@@ -379,6 +350,116 @@ def print_summary_row(noise_std, strategy_name, inventory_skew, summary):
     )
 
 
+def save_results_to_csv(rows):
+    """
+    Saves all experiment summary rows to a CSV file.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    df = pd.DataFrame(rows)
+
+    output_path = RESULTS_DIR / "experiment_results.csv"
+    df.to_csv(output_path, index=False)
+
+    print()
+    print(f"Saved experiment results to: {output_path}")
+
+    return df
+
+
+def save_metric_plot(df, metric, ylabel, title, filename):
+    """
+    Saves one line plot for a specific metric.
+
+    The x-axis is observation noise.
+    Each line is one strategy.
+    """
+
+    plt.figure(figsize=(10, 6))
+
+    for strategy in df["strategy"].unique():
+        strategy_df = df[df["strategy"] == strategy]
+
+        plt.plot(
+            strategy_df["observation_noise_std"],
+            strategy_df[metric],
+            marker="o",
+            label=strategy,
+        )
+
+    plt.xlabel("Observation Noise Standard Deviation")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / filename
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+
+def generate_plots(df):
+    """
+    Generates and saves plots from the experiment results.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    save_metric_plot(
+        df=df,
+        metric="avg_pnl",
+        ylabel="Average PnL",
+        title="Average PnL by Strategy and Observation Noise",
+        filename="avg_pnl_by_noise.png",
+    )
+
+    save_metric_plot(
+        df=df,
+        metric="avg_risk_adjusted_score",
+        ylabel="Average Risk-Adjusted Score",
+        title="Risk-Adjusted Score by Strategy and Observation Noise",
+        filename="risk_adjusted_score_by_noise.png",
+    )
+
+    save_metric_plot(
+        df=df,
+        metric="avg_abs_inventory",
+        ylabel="Average Absolute Inventory",
+        title="Average Inventory Exposure by Strategy and Observation Noise",
+        filename="avg_inventory_by_noise.png",
+    )
+
+    save_metric_plot(
+        df=df,
+        metric="avg_max_abs_inventory",
+        ylabel="Average Max Absolute Inventory",
+        title="Maximum Inventory Exposure by Strategy and Observation Noise",
+        filename="max_inventory_by_noise.png",
+    )
+
+    save_metric_plot(
+        df=df,
+        metric="avg_total_fills",
+        ylabel="Average Total Fills",
+        title="Average Total Fills by Strategy and Observation Noise",
+        filename="fills_by_noise.png",
+    )
+
+    save_metric_plot(
+        df=df,
+        metric="avg_effective_spread",
+        ylabel="Average Effective Spread",
+        title="Average Effective Spread by Strategy and Observation Noise",
+        filename="avg_spread_by_noise.png",
+    )
+
+
 def run_uncertainty_experiment():
     """
     Main experiment:
@@ -411,6 +492,8 @@ def run_uncertainty_experiment():
         ("uncertainty_aware", 0.0),
         ("inventory_and_uncertainty_aware", 0.002),
     ]
+
+    experiment_rows = []
 
     print("Uncertainty-Aware Market-Making Experiment")
     print("------------------------------------------")
@@ -458,7 +541,25 @@ def run_uncertainty_experiment():
                 summary=summary,
             )
 
+            row = {
+                "observation_noise_std": noise_std,
+                "strategy": strategy_name,
+                "inventory_skew": inventory_skew,
+                "base_spread": base_spread,
+                "num_steps": num_steps,
+                "num_trials": num_trials,
+                "risk_penalty": risk_penalty,
+                "uncertainty_sensitivity": uncertainty_sensitivity,
+                "volatility_window": volatility_window,
+                **summary,
+            }
+
+            experiment_rows.append(row)
+
         print()
+
+    df = save_results_to_csv(experiment_rows)
+    generate_plots(df)
 
 
 if __name__ == "__main__":
