@@ -9,9 +9,11 @@ def fill_probability(distance_from_true_mid):
     The farther our quote is from the true midprice, the less likely someone is
     to trade with us.
 
-    If the distance is negative, our quote is extremely aggressive.
-    For example, selling below true value or buying above true value.
-    We treat that as distance 0, meaning maximum fill probability.
+    If distance is negative, our quote is aggressive:
+        - bid is above true midprice, or
+        - ask is below true midprice
+
+    In that case, we treat distance as 0, meaning maximum fill probability.
     """
 
     base_fill_probability = 0.30
@@ -28,15 +30,44 @@ def fill_probability(distance_from_true_mid):
     return probability
 
 
+def choose_quote_mid_price(strategy, observed_mid_price, inventory, inventory_skew):
+    """
+    Chooses the center point around which the bot places its bid and ask.
+
+    Fixed strategy:
+        Quote around the observed midprice.
+
+    Inventory-aware strategy:
+        Shift quotes depending on inventory.
+
+        If inventory > 0:
+            We are long.
+            Shift quotes down to encourage selling and discourage buying.
+
+        If inventory < 0:
+            We are short.
+            Shift quotes up to encourage buying and discourage selling.
+    """
+
+    if strategy == "fixed":
+        return observed_mid_price
+
+    if strategy == "inventory_aware":
+        return observed_mid_price - inventory_skew * inventory
+
+    raise ValueError(f"Unknown strategy: {strategy}")
+
+
 def run_simulation(
     spread,
     num_steps,
     strategy,
-    inventory_skew=0.0,
-    observation_noise_std=0.03,
+    inventory_skew,
+    observation_noise_std,
+    risk_penalty,
 ):
     """
-    Runs one market-making simulation.
+    Runs one simulation of the market-making bot.
 
     spread:
         Difference between ask and bid.
@@ -45,15 +76,19 @@ def run_simulation(
         Number of time steps in the simulation.
 
     strategy:
-        Either "fixed" or "inventory_aware".
+        "fixed" or "inventory_aware"
 
     inventory_skew:
-        How strongly inventory-aware quoting adjusts prices.
+        How strongly the inventory-aware strategy adjusts quotes.
 
     observation_noise_std:
         Standard deviation of the bot's observation error.
 
-        Bigger value = bot has a less accurate estimate of the true midprice.
+        If this is 0, the bot perfectly observes the true midprice.
+        If this is larger, the bot has a noisier estimate.
+
+    risk_penalty:
+        How much we penalize average inventory exposure in the risk-adjusted score.
     """
 
     initial_price = 100.00
@@ -66,43 +101,36 @@ def run_simulation(
     sell_fills = 0
 
     max_abs_inventory = 0
-    sum_abs_inventory = 0
-    sum_abs_observation_error = 0
+    sum_abs_inventory = 0.0
+    sum_abs_observation_error = 0.0
 
     for step in range(num_steps):
         # 1. The true market price moves randomly.
         price_change = random.choice([-0.01, 0.01])
         true_mid_price += price_change
 
-        # 2. The bot does NOT perfectly observe the true price anymore.
+        # 2. The bot observes the true price with noise.
         observation_noise = random.gauss(0.0, observation_noise_std)
         observed_mid_price = true_mid_price + observation_noise
 
         sum_abs_observation_error += abs(observation_noise)
 
-        # 3. Choose the center of our bid/ask quotes.
-        if strategy == "fixed":
-            quote_mid_price = observed_mid_price
+        # 3. The bot chooses the center of its bid/ask quotes.
+        quote_mid_price = choose_quote_mid_price(
+            strategy=strategy,
+            observed_mid_price=observed_mid_price,
+            inventory=inventory,
+            inventory_skew=inventory_skew,
+        )
 
-        elif strategy == "inventory_aware":
-            quote_mid_price = observed_mid_price - inventory_skew * inventory
-
-        else:
-            raise ValueError(f"Unknown strategy: {strategy}")
-
-        # 4. Place bid and ask around our chosen quote midpoint.
+        # 4. The bot places bid and ask around its chosen quote midpoint.
         bid_price = quote_mid_price - spread / 2
         ask_price = quote_mid_price + spread / 2
 
-        # 5. IMPORTANT:
-        # Fill probability is based on distance from the TRUE midprice,
-        # not the observed midprice.
+        # 5. Fills depend on the TRUE midprice, not the bot's observed price.
         #
-        # If our bid is close to true_mid_price, sellers are more likely
-        # to sell to us.
-        #
-        # If our ask is close to true_mid_price, buyers are more likely
-        # to buy from us.
+        # This is important:
+        # If the bot has a bad estimate, it may quote bad prices.
         bid_distance = true_mid_price - bid_price
         ask_distance = ask_price - true_mid_price
 
@@ -129,12 +157,10 @@ def run_simulation(
     average_abs_inventory = sum_abs_inventory / num_steps
     average_abs_observation_error = sum_abs_observation_error / num_steps
 
-    risk_penalty = 2.0
     risk_adjusted_score = final_pnl - risk_penalty * average_abs_inventory
 
     return {
         "strategy": strategy,
-        "spread": spread,
         "inventory_skew": inventory_skew,
         "observation_noise_std": observation_noise_std,
         "final_pnl": final_pnl,
@@ -158,10 +184,108 @@ def average(values):
     return sum(values) / len(values)
 
 
-def run_experiment():
+def standard_deviation(values):
     """
-    Compares fixed quoting and inventory-aware quoting when the bot observes
-    the midprice with noise.
+    Returns the standard deviation of a list of numbers.
+
+    This helps us measure how unstable the PnL is across trials.
+    """
+
+    mean = average(values)
+    variance = average([(value - mean) ** 2 for value in values])
+    return math.sqrt(variance)
+
+
+def summarize_results(results):
+    """
+    Takes many simulation results and summarizes them.
+    """
+
+    pnls = [result["final_pnl"] for result in results]
+    risk_adjusted_scores = [result["risk_adjusted_score"] for result in results]
+
+    return {
+        "avg_pnl": average(pnls),
+        "std_pnl": standard_deviation(pnls),
+        "avg_risk_adjusted_score": average(risk_adjusted_scores),
+        "avg_total_fills": average([result["total_fills"] for result in results]),
+        "avg_abs_final_inventory": average(
+            [result["abs_final_inventory"] for result in results]
+        ),
+        "avg_max_abs_inventory": average(
+            [result["max_abs_inventory"] for result in results]
+        ),
+        "avg_abs_inventory": average(
+            [result["average_abs_inventory"] for result in results]
+        ),
+        "avg_abs_observation_error": average(
+            [result["average_abs_observation_error"] for result in results]
+        ),
+    }
+
+
+def run_trials_for_strategy(
+    spread,
+    num_steps,
+    num_trials,
+    strategy,
+    inventory_skew,
+    observation_noise_std,
+    risk_penalty,
+):
+    """
+    Runs many simulations for one strategy under one noise level.
+    """
+
+    results = []
+
+    for trial in range(num_trials):
+        result = run_simulation(
+            spread=spread,
+            num_steps=num_steps,
+            strategy=strategy,
+            inventory_skew=inventory_skew,
+            observation_noise_std=observation_noise_std,
+            risk_penalty=risk_penalty,
+        )
+        results.append(result)
+
+    return summarize_results(results)
+
+
+def print_summary_row(noise_std, strategy_name, inventory_skew, summary):
+    """
+    Prints one row of the experiment table.
+    """
+
+    print(
+        f"{noise_std:<8}"
+        f"{strategy_name:<22}"
+        f"{inventory_skew:<10}"
+        f"{summary['avg_pnl']:<12.2f}"
+        f"{summary['std_pnl']:<12.2f}"
+        f"{summary['avg_risk_adjusted_score']:<16.2f}"
+        f"{summary['avg_abs_inventory']:<14.2f}"
+        f"{summary['avg_max_abs_inventory']:<14.2f}"
+        f"{summary['avg_total_fills']:<12.2f}"
+    )
+
+
+def run_noise_experiment():
+    """
+    Main experiment:
+
+    For each observation-noise level, compare:
+        - fixed quoting
+        - inventory-aware quoting with different inventory skew values
+
+    We compare:
+        - average PnL
+        - PnL standard deviation
+        - risk-adjusted score
+        - average inventory exposure
+        - max inventory exposure
+        - total fills
     """
 
     random.seed(42)
@@ -169,65 +293,60 @@ def run_experiment():
     spread = 0.10
     num_steps = 1000
     num_trials = 500
-    observation_noise_std = 0.03
+    risk_penalty = 2.0
+
+    noise_levels = [0.00, 0.01, 0.03, 0.05, 0.10, 0.20]
 
     strategies = [
         ("fixed", 0.0),
         ("inventory_aware", 0.001),
         ("inventory_aware", 0.002),
         ("inventory_aware", 0.005),
+        ("inventory_aware", 0.010),
     ]
 
     print("Noisy Observation Market-Making Experiment")
     print("------------------------------------------")
     print(f"Spread: {spread}")
-    print(f"Observation noise std: {observation_noise_std}")
-    print(f"Number of steps per simulation: {num_steps}")
-    print(f"Number of trials per strategy: {num_trials}")
+    print(f"Steps per simulation: {num_steps}")
+    print(f"Trials per strategy/noise level: {num_trials}")
+    print(f"Risk penalty: {risk_penalty}")
     print()
 
-    for strategy, inventory_skew in strategies:
-        results = []
+    print(
+        f"{'Noise':<8}"
+        f"{'Strategy':<22}"
+        f"{'Skew':<10}"
+        f"{'Avg PnL':<12}"
+        f"{'Std PnL':<12}"
+        f"{'Risk Adj':<16}"
+        f"{'Avg |Inv|':<14}"
+        f"{'Max |Inv|':<14}"
+        f"{'Fills':<12}"
+    )
+    print("-" * 120)
 
-        for trial in range(num_trials):
-            result = run_simulation(
+    for noise_std in noise_levels:
+        for strategy_name, inventory_skew in strategies:
+            summary = run_trials_for_strategy(
                 spread=spread,
                 num_steps=num_steps,
-                strategy=strategy,
+                num_trials=num_trials,
+                strategy=strategy_name,
                 inventory_skew=inventory_skew,
-                observation_noise_std=observation_noise_std,
+                observation_noise_std=noise_std,
+                risk_penalty=risk_penalty,
             )
-            results.append(result)
 
-        avg_pnl = average([result["final_pnl"] for result in results])
-        avg_risk_adjusted_score = average(
-            [result["risk_adjusted_score"] for result in results]
-        )
-        avg_total_fills = average([result["total_fills"] for result in results])
-        avg_abs_final_inventory = average(
-            [result["abs_final_inventory"] for result in results]
-        )
-        avg_max_abs_inventory = average(
-            [result["max_abs_inventory"] for result in results]
-        )
-        avg_abs_inventory = average(
-            [result["average_abs_inventory"] for result in results]
-        )
-        avg_abs_observation_error = average(
-            [result["average_abs_observation_error"] for result in results]
-        )
+            print_summary_row(
+                noise_std=noise_std,
+                strategy_name=strategy_name,
+                inventory_skew=inventory_skew,
+                summary=summary,
+            )
 
-        print(f"Strategy: {strategy}")
-        print(f"Inventory skew: {inventory_skew}")
-        print(f"  Average PnL: {round(avg_pnl, 2)}")
-        print(f"  Average risk-adjusted score: {round(avg_risk_adjusted_score, 2)}")
-        print(f"  Average total fills: {round(avg_total_fills, 2)}")
-        print(f"  Average absolute final inventory: {round(avg_abs_final_inventory, 2)}")
-        print(f"  Average max absolute inventory: {round(avg_max_abs_inventory, 2)}")
-        print(f"  Average absolute inventory over time: {round(avg_abs_inventory, 2)}")
-        print(f"  Average absolute observation error: {round(avg_abs_observation_error, 4)}")
         print()
 
 
 if __name__ == "__main__":
-    run_experiment()
+    run_noise_experiment()
