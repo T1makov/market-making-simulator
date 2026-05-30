@@ -8,10 +8,6 @@ def fill_probability(distance_from_mid):
 
     The farther our quote is from the midprice, the less likely someone is
     to trade with us.
-
-    Example:
-    - If our ask is very close to the midprice, buyers are more likely to buy.
-    - If our ask is very far above the midprice, buyers are less likely to buy.
     """
 
     base_fill_probability = 0.30
@@ -22,24 +18,30 @@ def fill_probability(distance_from_mid):
     return probability
 
 
-def run_simulation():
-    # The market starts at this price.
-    initial_price = 100.00
+def run_simulation(spread, num_steps):
+    """
+    Runs one market-making simulation.
 
-    # This is the market's actual current reference price.
+    spread:
+        Difference between our ask and bid.
+
+        Example:
+        if spread = 0.10 and midprice = 100,
+        then bid = 99.95 and ask = 100.05.
+
+    num_steps:
+        Number of time steps in the simulation.
+    """
+
+    initial_price = 100.00
     true_mid_price = initial_price
 
-    # Our bot's state.
     cash = 0.0
     inventory = 0
 
-    # Strategy settings.
-    spread = 0.1
-    num_steps = 1000
-
-    # Useful statistics.
-    buy_fills = 0    # number of times someone sold to us, so we bought
-    sell_fills = 0   # number of times someone bought from us, so we sold
+    buy_fills = 0
+    sell_fills = 0
+    max_abs_inventory = 0
 
     for step in range(num_steps):
         # 1. The market price moves randomly.
@@ -57,36 +59,82 @@ def run_simulation():
         bid_distance = observed_mid_price - bid_price
         ask_distance = ask_price - observed_mid_price
 
-        # 5. Convert those distances into fill probabilities.
+        # 5. Convert quote distances into fill probabilities.
         prob_someone_sells_to_us = fill_probability(bid_distance)
         prob_someone_buys_from_us = fill_probability(ask_distance)
 
-        # 6. Check whether someone sells to us.
+        # 6. Someone sells to us, so we buy at our bid.
         if random.random() < prob_someone_sells_to_us:
-            # Someone sells to us, so we buy from them at our bid.
             inventory += 1
             cash -= bid_price
             buy_fills += 1
 
-        # 7. Check whether someone buys from us.
+        # 7. Someone buys from us, so we sell at our ask.
         if random.random() < prob_someone_buys_from_us:
-            # Someone buys from us, so we sell to them at our ask.
             inventory -= 1
             cash += ask_price
             sell_fills += 1
 
-    # Final PnL = cash + value of our remaining inventory.
+        # 8. Track our largest inventory exposure.
+        max_abs_inventory = max(max_abs_inventory, abs(inventory))
+
     final_pnl = cash + inventory * true_mid_price
 
-    print("Initial price:", round(initial_price, 2))
-    print("Final true mid price:", round(true_mid_price, 2))
-    print("Final cash:", round(cash, 2))
-    print("Final inventory:", inventory)
-    print("Buy fills:", buy_fills)
-    print("Sell fills:", sell_fills)
-    print("Total fills:", buy_fills + sell_fills)
-    print("Final PnL:", round(final_pnl, 2))
+    return {
+        "spread": spread,
+        "final_pnl": final_pnl,
+        "final_inventory": inventory,
+        "buy_fills": buy_fills,
+        "sell_fills": sell_fills,
+        "total_fills": buy_fills + sell_fills,
+        "max_abs_inventory": max_abs_inventory,
+    }
+
+
+def average(values):
+    """
+    Returns the average of a list of numbers.
+    """
+
+    return sum(values) / len(values)
+
+
+def run_experiment():
+    """
+    Runs many simulations for different spreads and compares them.
+    """
+
+    random.seed(42)
+
+    spreads = [0.02, 0.05, 0.10, 0.20, 0.50]
+    num_steps = 1000
+    num_trials = 200
+
+    print("Spread Experiment")
+    print("-----------------")
+    print(f"Number of steps per simulation: {num_steps}")
+    print(f"Number of trials per spread: {num_trials}")
+    print()
+
+    for spread in spreads:
+        results = []
+
+        for trial in range(num_trials):
+            result = run_simulation(spread=spread, num_steps=num_steps)
+            results.append(result)
+
+        avg_pnl = average([result["final_pnl"] for result in results])
+        avg_total_fills = average([result["total_fills"] for result in results])
+        avg_final_inventory = average([result["final_inventory"] for result in results])
+        avg_max_abs_inventory = average([result["max_abs_inventory"] for result in results])
+
+        print(f"Spread: {spread}")
+        print(f"  Average PnL: {round(avg_pnl, 2)}")
+        print(f"  Average total fills: {round(avg_total_fills, 2)}")
+        print(f"  Average final inventory: {round(avg_final_inventory, 2)}")
+        print(f"  Average max absolute inventory: {round(avg_max_abs_inventory, 2)}")
+        print()
 
 
 if __name__ == "__main__":
-    run_simulation()
+    run_experiment()
