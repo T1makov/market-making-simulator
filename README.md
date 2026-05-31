@@ -10,6 +10,7 @@ The project compares several quoting strategies:
 * combined inventory-and-uncertainty-aware market making
 
 The goal is to study the tradeoff between spread capture, fill frequency, inventory exposure, and risk-adjusted performance.
+
 ---
 
 ## Motivation
