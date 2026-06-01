@@ -95,3 +95,50 @@ def generate_plots(df):
         title="Average Effective Spread by Strategy and Observation Noise",
         filename="avg_spread_by_noise.png",
     )
+def save_price_path_plot(
+    simulation_result,
+    filename="sample_true_vs_observed_midprice.png",
+):
+    """
+    Saves a plot of the true midprice and observed midprice from one simulation.
+
+    This is useful for visualizing the simulated market path and the noisy
+    price signal observed by the bot.
+    """
+
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    true_prices = simulation_result["true_mid_price_history"]
+    observed_prices = simulation_result["observed_mid_price_history"]
+
+    steps = list(range(len(true_prices)))
+
+    plt.figure(figsize=(10, 6))
+
+    plt.plot(
+    steps,
+    observed_prices,
+    label="Observed midprice",
+    linewidth=1.0,
+    alpha=0.45,
+    )
+
+    plt.plot(
+        steps,
+        true_prices,
+        label="True midprice",
+        linewidth=2.5,
+    )
+
+    plt.xlabel("Time Step")
+    plt.ylabel("Midprice")
+    plt.title("Sample True vs Observed Midprice Path")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / filename
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")

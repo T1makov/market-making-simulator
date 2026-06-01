@@ -4,7 +4,7 @@ import random
 
 import pandas as pd
 
-from .plotting import generate_plots
+from .plotting import generate_plots, save_price_path_plot
 from .simulator import run_simulation
 from .toy_simulator import summarize_results
 
@@ -213,3 +213,22 @@ def run_uncertainty_experiment():
 
     df = save_results_to_csv(experiment_rows)
     generate_plots(df)
+
+    sample_path_result = run_simulation(
+        base_spread=base_spread,
+        num_steps=num_steps,
+        strategy="inventory_and_uncertainty_aware",
+        inventory_skew=0.002,
+        observation_noise_std=0.05,
+        risk_penalty=risk_penalty,
+        uncertainty_sensitivity=uncertainty_sensitivity,
+        volatility_window=volatility_window,
+        price_process=price_process,
+        random_walk_step_size=random_walk_step_size,
+        brownian_drift=brownian_drift,
+        brownian_volatility=brownian_volatility,
+        dt=dt,
+        record_history=True,
+    )
+
+    save_price_path_plot(sample_path_result)

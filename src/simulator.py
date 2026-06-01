@@ -20,6 +20,7 @@ def run_simulation(
     brownian_drift=0.0,
     brownian_volatility=0.02,
     dt=1.0,
+    record_history=False,
 ):
     """
     Runs one simulation of the market-making bot.
@@ -43,6 +44,9 @@ def run_simulation(
     previous_observed_mid_price = None
     recent_observed_price_changes = []
 
+    true_mid_price_history = []
+    observed_mid_price_history = []
+
     for step in range(num_steps):
         # 1. The true market price moves randomly.
         true_mid_price = next_price(
@@ -56,6 +60,10 @@ def run_simulation(
         # 2. The bot observes the true price with noise.
         observation_noise = random.gauss(0.0, observation_noise_std)
         observed_mid_price = true_mid_price + observation_noise
+
+        if record_history:
+            true_mid_price_history.append(true_mid_price)
+            observed_mid_price_history.append(observed_mid_price)
 
         sum_abs_observation_error += abs(observation_noise)
 
@@ -125,7 +133,7 @@ def run_simulation(
 
     risk_adjusted_score = final_pnl - risk_penalty * average_abs_inventory
 
-    return {
+    result = {
         "strategy": strategy,
         "inventory_skew": inventory_skew,
         "observation_noise_std": observation_noise_std,
@@ -142,3 +150,9 @@ def run_simulation(
         "average_effective_spread": average_effective_spread,
         "average_estimated_uncertainty": average_estimated_uncertainty,
     }
+
+    if record_history:
+        result["true_mid_price_history"] = true_mid_price_history
+        result["observed_mid_price_history"] = observed_mid_price_history
+
+    return result
