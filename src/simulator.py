@@ -3,6 +3,7 @@ import random
 from .fill_model import fill_probability
 from .sim_stats import estimate_uncertainty
 from .strategies import choose_effective_spread, choose_quote_mid_price
+from .price_process import next_price
 
 
 def run_simulation(
@@ -14,6 +15,11 @@ def run_simulation(
     risk_penalty,
     uncertainty_sensitivity,
     volatility_window,
+    price_process="random_walk",
+    random_walk_step_size=0.01,
+    brownian_drift=0.0,
+    brownian_volatility=0.02,
+    dt=1.0,
 ):
     """
     Runs one simulation of the market-making bot.
@@ -39,9 +45,14 @@ def run_simulation(
 
     for step in range(num_steps):
         # 1. The true market price moves randomly.
-        price_change = random.choice([-0.01, 0.01])
-        true_mid_price += price_change
-
+        true_mid_price = next_price(
+            current_price=true_mid_price,
+            price_process=price_process,
+            random_walk_step_size=random_walk_step_size,
+            brownian_drift=brownian_drift,
+            brownian_volatility=brownian_volatility,
+            dt=dt,
+        )
         # 2. The bot observes the true price with noise.
         observation_noise = random.gauss(0.0, observation_noise_std)
         observed_mid_price = true_mid_price + observation_noise
