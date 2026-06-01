@@ -5,6 +5,12 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
+"""
+Legacy one-file version of the simulator.
+
+The current modular version should be run with:
+    python3 -m src.main
+"""
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = PROJECT_ROOT / "results"
