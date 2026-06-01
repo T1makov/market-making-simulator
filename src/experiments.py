@@ -22,6 +22,11 @@ def run_trials_for_strategy(
     risk_penalty,
     uncertainty_sensitivity,
     volatility_window,
+    price_process,
+    random_walk_step_size,
+    brownian_drift,
+    brownian_volatility,
+    dt,
 ):
     """
     Runs many simulations for one strategy under one noise level.
@@ -39,6 +44,11 @@ def run_trials_for_strategy(
             risk_penalty=risk_penalty,
             uncertainty_sensitivity=uncertainty_sensitivity,
             volatility_window=volatility_window,
+            price_process=price_process,
+            random_walk_step_size=random_walk_step_size,
+            brownian_drift=brownian_drift,
+            brownian_volatility=brownian_volatility,
+            dt=dt,
         )
         results.append(result)
 
@@ -107,6 +117,12 @@ def run_uncertainty_experiment():
     uncertainty_sensitivity = 3.0
     volatility_window = 50
 
+    price_process = "brownian"
+    random_walk_step_size = 0.01
+    brownian_drift = 0.0
+    brownian_volatility = 0.02
+    dt = 1.0    
+
     noise_levels = [0.00, 0.01, 0.03, 0.05, 0.10, 0.20]
 
     strategies = [
@@ -126,6 +142,10 @@ def run_uncertainty_experiment():
     print(f"Risk penalty: {risk_penalty}")
     print(f"Uncertainty sensitivity: {uncertainty_sensitivity}")
     print(f"Volatility window: {volatility_window}")
+    print(f"Price process: {price_process}")
+    print(f"Brownian drift: {brownian_drift}")
+    print(f"Brownian volatility: {brownian_volatility}")
+    print(f"dt: {dt}")
     print()
 
     print(
@@ -155,6 +175,11 @@ def run_uncertainty_experiment():
                 risk_penalty=risk_penalty,
                 uncertainty_sensitivity=uncertainty_sensitivity,
                 volatility_window=volatility_window,
+                price_process=price_process,
+                random_walk_step_size=random_walk_step_size,
+                brownian_drift=brownian_drift,
+                brownian_volatility=brownian_volatility,
+                dt=dt,
             )
 
             print_summary_row(
@@ -174,6 +199,11 @@ def run_uncertainty_experiment():
                 "risk_penalty": risk_penalty,
                 "uncertainty_sensitivity": uncertainty_sensitivity,
                 "volatility_window": volatility_window,
+                "price_process": price_process,
+                "random_walk_step_size": random_walk_step_size,
+                "brownian_drift": brownian_drift,
+                "brownian_volatility": brownian_volatility,
+                "dt": dt,
                 **summary,
             }
 
