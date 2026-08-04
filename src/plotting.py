@@ -239,3 +239,48 @@ def generate_volatility_plots(df):
         title="Estimated Uncertainty by Strategy and Brownian Volatility",
         filename="estimated_uncertainty_by_volatility.png",
     )
+def generate_optimization_plots(df):
+    """
+    Generates plots for the parameter optimization experiment.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    top_df = df.sort_values(
+        by="avg_risk_adjusted_score",
+        ascending=False,
+    ).head(10)
+
+    top_df = top_df.copy()
+
+    top_df["parameter_set"] = (
+        "spread="
+        + top_df["base_spread"].astype(str)
+        + ", skew="
+        + top_df["inventory_skew"].astype(str)
+        + ", sens="
+        + top_df["uncertainty_sensitivity"].astype(str)
+    )
+
+    # Reverse so the best parameter set appears at the top of the horizontal bar chart.
+    top_df = top_df.iloc[::-1]
+
+    plt.figure(figsize=(12, 7))
+
+    plt.barh(
+        top_df["parameter_set"],
+        top_df["avg_risk_adjusted_score"],
+    )
+
+    plt.xlabel("Average Risk-Adjusted Score")
+    plt.ylabel("Parameter Set")
+    plt.title("Top 10 Parameter Sets by Risk-Adjusted Score")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "top_parameter_sets.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
