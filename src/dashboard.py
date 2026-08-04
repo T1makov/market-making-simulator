@@ -7,6 +7,8 @@ import streamlit as st
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_DIR = PROJECT_ROOT / "results"
+BEST_PARAMETERS_PATH = RESULTS_DIR / "best_parameters_by_regime.csv"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -14,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.experiments import run_trials_for_strategy
 from src.simulator import run_simulation
+
 
 st.set_page_config(
     page_title="Market-Making Simulator",
@@ -28,6 +31,58 @@ STRATEGIES = [
     "uncertainty_aware",
     "inventory_and_uncertainty_aware",
 ]
+
+
+DEFAULT_SETTINGS = {
+    "seed": 42,
+    "price_process": "brownian",
+    "num_steps": 1000,
+    "base_spread": 0.10,
+    "inventory_skew": 0.002,
+    "observation_noise_std": 0.03,
+    "risk_penalty": 2.0,
+    "uncertainty_sensitivity": 3.0,
+    "volatility_window": 50,
+    "random_walk_step_size": 0.01,
+    "brownian_drift": 0.0,
+    "brownian_volatility": 0.02,
+    "dt": 1.0,
+}
+
+
+for key, value in DEFAULT_SETTINGS.items():
+    st.session_state.setdefault(key, value)
+
+
+@st.cache_data
+def load_best_parameters_by_regime():
+    """
+    Loads optimized parameter presets if the regime optimization summary exists.
+    """
+
+    if not BEST_PARAMETERS_PATH.exists():
+        return None
+
+    return pd.read_csv(BEST_PARAMETERS_PATH)
+
+
+def apply_regime_preset(row):
+    """
+    Applies one optimized regime preset to the dashboard controls.
+    """
+
+    st.session_state["price_process"] = "brownian"
+    st.session_state["base_spread"] = float(row["base_spread"])
+    st.session_state["inventory_skew"] = float(row["inventory_skew"])
+    st.session_state["uncertainty_sensitivity"] = float(
+        row["uncertainty_sensitivity"]
+    )
+    st.session_state["brownian_volatility"] = float(
+        row["brownian_volatility"]
+    )
+    st.session_state["observation_noise_std"] = float(
+        row["observation_noise_std"]
+    )
 
 
 def run_sample_simulation(
@@ -72,6 +127,7 @@ def run_sample_simulation(
 
 def run_strategy_comparison(
     base_spread,
+    inventory_skew,
     observation_noise_std,
     risk_penalty,
     uncertainty_sensitivity,
@@ -95,18 +151,18 @@ def run_strategy_comparison(
 
     strategy_configs = [
         ("fixed", 0.0),
-        ("inventory_aware", 0.002),
+        ("inventory_aware", inventory_skew),
         ("uncertainty_aware", 0.0),
-        ("inventory_and_uncertainty_aware", 0.002),
+        ("inventory_and_uncertainty_aware", inventory_skew),
     ]
 
-    for strategy_name, inventory_skew in strategy_configs:
+    for strategy_name, strategy_inventory_skew in strategy_configs:
         summary = run_trials_for_strategy(
             base_spread=base_spread,
             num_steps=num_steps,
             num_trials=num_trials,
             strategy=strategy_name,
-            inventory_skew=inventory_skew,
+            inventory_skew=strategy_inventory_skew,
             observation_noise_std=observation_noise_std,
             risk_penalty=risk_penalty,
             uncertainty_sensitivity=uncertainty_sensitivity,
@@ -120,7 +176,7 @@ def run_strategy_comparison(
 
         row = {
             "strategy": strategy_name,
-            "inventory_skew": inventory_skew,
+            "inventory_skew": strategy_inventory_skew,
             **summary,
         }
 
@@ -141,68 +197,122 @@ st.write(
 
 
 with st.sidebar:
+    st.header("Optimized Presets")
+
+    preset_df = load_best_parameters_by_regime()
+
+    if preset_df is None:
+        st.info(
+            "No optimized preset file found. Run "
+            "`python3 -m src.analyze_regime_results` first."
+        )
+    else:
+        selected_regime = st.selectbox(
+            "Regime preset",
+            options=list(preset_df["regime"]),
+        )
+
+        selected_row = preset_df[
+            preset_df["regime"] == selected_regime
+        ].iloc[0]
+
+        st.caption(
+            f"Best preset for `{selected_regime}` based on "
+            "risk-adjusted score."
+        )
+
+        st.dataframe(
+            selected_row[
+                [
+                    "base_spread",
+                    "inventory_skew",
+                    "uncertainty_sensitivity",
+                    "brownian_volatility",
+                    "observation_noise_std",
+                    "avg_risk_adjusted_score",
+                    "avg_total_fills",
+                ]
+            ].to_frame("value"),
+            use_container_width=True,
+        )
+
+        if st.button("Apply Optimized Preset"):
+            apply_regime_preset(selected_row)
+            st.success(f"Applied preset: {selected_regime}")
+
+    st.divider()
+
     st.header("Simulation Settings")
 
     seed = st.number_input(
         "Random seed",
         min_value=0,
         max_value=100000,
-        value=42,
         step=1,
+        key="seed",
     )
 
     price_process = st.selectbox(
         "Price process",
         options=["brownian", "random_walk"],
-        index=0,
+        key="price_process",
     )
 
     num_steps = st.slider(
         "Steps per simulation",
         min_value=100,
         max_value=5000,
-        value=1000,
         step=100,
+        key="num_steps",
     )
 
     base_spread = st.slider(
         "Base spread",
         min_value=0.01,
         max_value=0.50,
-        value=0.10,
         step=0.01,
+        key="base_spread",
+    )
+
+    inventory_skew = st.slider(
+        "Inventory skew",
+        min_value=0.0,
+        max_value=0.010,
+        step=0.001,
+        format="%.3f",
+        key="inventory_skew",
     )
 
     observation_noise_std = st.slider(
         "Observation noise std",
         min_value=0.00,
         max_value=0.30,
-        value=0.03,
         step=0.01,
+        key="observation_noise_std",
     )
 
     risk_penalty = st.slider(
         "Risk penalty",
         min_value=0.0,
         max_value=10.0,
-        value=2.0,
         step=0.5,
+        key="risk_penalty",
     )
 
     uncertainty_sensitivity = st.slider(
         "Uncertainty sensitivity",
         min_value=0.0,
         max_value=10.0,
-        value=3.0,
         step=0.5,
+        key="uncertainty_sensitivity",
     )
 
     volatility_window = st.slider(
         "Volatility window",
         min_value=5,
         max_value=200,
-        value=50,
         step=5,
+        key="volatility_window",
     )
 
     st.header("Price Process Parameters")
@@ -211,35 +321,35 @@ with st.sidebar:
         "Random walk step size",
         min_value=0.001,
         max_value=0.10,
-        value=0.01,
         step=0.001,
         format="%.3f",
+        key="random_walk_step_size",
     )
 
     brownian_drift = st.slider(
         "Brownian drift",
         min_value=-0.05,
         max_value=0.05,
-        value=0.0,
         step=0.005,
         format="%.3f",
+        key="brownian_drift",
     )
 
     brownian_volatility = st.slider(
         "Brownian volatility",
         min_value=0.001,
         max_value=0.20,
-        value=0.02,
         step=0.001,
         format="%.3f",
+        key="brownian_volatility",
     )
 
     dt = st.slider(
         "dt",
         min_value=0.1,
         max_value=5.0,
-        value=1.0,
         step=0.1,
+        key="dt",
     )
 
 
@@ -261,15 +371,6 @@ with tab_sample:
             "Strategy",
             options=STRATEGIES,
             index=3,
-        )
-
-        inventory_skew = st.slider(
-            "Inventory skew",
-            min_value=0.0,
-            max_value=0.010,
-            value=0.002,
-            step=0.001,
-            format="%.3f",
         )
 
         run_button = st.button("Run Single Simulation")
@@ -331,6 +432,9 @@ with tab_sample:
             pd.DataFrame([result_without_history]),
             use_container_width=True,
         )
+    else:
+        with col_right:
+            st.info("Click **Run Single Simulation** to generate a price path.")
 
 
 with tab_compare:
@@ -356,6 +460,7 @@ with tab_compare:
     if compare_button:
         comparison_df = run_strategy_comparison(
             base_spread=base_spread,
+            inventory_skew=inventory_skew,
             observation_noise_std=observation_noise_std,
             risk_penalty=risk_penalty,
             uncertainty_sensitivity=uncertainty_sensitivity,
