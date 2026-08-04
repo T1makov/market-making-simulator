@@ -6,7 +6,7 @@ import pandas as pd
 
 from .plotting import generate_plots, save_price_path_plot
 from .simulator import run_simulation
-from .toy_simulator import summarize_results
+from .sim_stats import summarize_results
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = PROJECT_ROOT / "results"

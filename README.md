@@ -1,15 +1,15 @@
 # Stochastic Market-Making Simulator
 
-A Python simulator for testing market-making strategies under stochastic price movement, noisy price observations, inventory risk, and uncertainty-aware spread adjustment.
+A modular Python simulator for testing market-making strategies under stochastic price dynamics, noisy price observations, inventory risk, and uncertainty-aware spread adjustment.
 
-The project compares several quoting strategies:
+The simulator currently supports both a simple random-walk price process and an arithmetic Brownian motion price process. It compares four quoting strategies:
 
-* fixed-spread market making
-* inventory-aware market making
-* uncertainty-aware market making
-* combined inventory-and-uncertainty-aware market making
+- fixed-spread market making
+- inventory-aware market making
+- uncertainty-aware market making
+- combined inventory-and-uncertainty-aware market making
 
-The goal is to study the tradeoff between spread capture, fill frequency, inventory exposure, and risk-adjusted performance.
+The goal is to study the tradeoff between spread capture, fill frequency, inventory exposure, noisy fair-value estimation, adverse selection, and risk-adjusted performance.
 
 ---
 
@@ -31,18 +31,45 @@ The simulator uses a simplified discrete-time market.
 
 At each time step:
 
-1. The true midprice moves randomly.
+1. The true midprice moves according to a selected stochastic price process.
 2. The bot observes a noisy version of the true midprice.
-3. The bot posts a bid and ask quote.
+3. The bot chooses a bid and ask quote based on its strategy.
 4. Fill probabilities are determined by how far the quotes are from the true midprice.
-5. The bot updates cash, inventory, and PnL.
+5. The bot updates cash, inventory, and mark-to-market PnL.
 6. The simulation tracks risk and performance metrics.
 
-The bot does not directly observe the true midprice. It only sees the noisy observed midprice.
+The bot does **not** directly observe the true midprice. It only sees the noisy observed midprice. The simulator still uses the hidden true midprice to determine whether quotes are attractive to incoming buyers and sellers.
 
 ---
 
-## Price Process
+## Project Structure
+
+```text
+src/
+  main.py              # entry point for running the main experiment
+  experiments.py       # multi-trial experiment runner and CSV export
+  simulator.py         # single simulation path logic
+  strategies.py        # quote-midpoint and spread selection rules
+  fill_model.py        # quote-distance-based fill probabilities
+  price_process.py     # random walk and Brownian motion price processes
+  sim_stats.py         # statistics helpers and result aggregation
+  plotting.py          # experiment and sample-path plotting
+
+tests/
+  test_fill_model.py
+  test_price_process.py
+  test_sim_stats.py
+  test_simulator.py
+  test_strategies.py
+
+results/
+  experiment_results.csv
+  plots/
+```
+
+---
+
+## Price Processes
 
 The true midprice begins at:
 
@@ -50,14 +77,43 @@ The true midprice begins at:
 initial_price = 100.00
 ```
 
-At each time step, the true price moves randomly by one cent:
+The simulator supports multiple stochastic price processes through `src/price_process.py`.
+
+### Simple Random Walk
+
+The original toy model moved the true midprice up or down by a fixed amount:
 
 ```python
-price_change = random.choice([-0.01, 0.01])
-true_mid_price += price_change
+price_change = random.choice([-step_size, step_size])
+new_price = current_price + price_change
 ```
 
-This is a simple random walk. Later versions may replace this with more realistic stochastic processes such as Brownian motion, Ornstein-Uhlenbeck mean reversion, or regime-switching volatility.
+This is useful as a simple baseline, but every price movement has the same size.
+
+### Arithmetic Brownian Motion
+
+The current main experiment uses an arithmetic Brownian motion price process:
+
+```text
+S_{t+dt} = S_t + μdt + σ√dt Z
+```
+
+where:
+
+- `S_t` is the true midprice at time `t`
+- `μ` is the drift
+- `σ` is the volatility
+- `dt` is the time-step size
+- `Z ~ Normal(0, 1)` is a standard normal random shock
+
+In code, the price update is:
+
+```python
+price_change = drift * dt + volatility * sqrt(dt) * z
+new_price = current_price + price_change
+```
+
+The main experiment uses zero drift so the bot is not rewarded for taking a directional view. Strategy performance comes from quoting behavior, inventory control, and uncertainty handling rather than from market drift.
 
 ---
 
@@ -75,7 +131,7 @@ where:
 observation_noise = random.gauss(0.0, observation_noise_std)
 ```
 
-The simulator controls `observation_noise_std`, but the bot does not directly know this value. The bot only sees the noisy observed price.
+The simulator controls `observation_noise_std`, but the bot does not directly know the true noise level. The bot only sees the noisy observed price.
 
 This creates fair-value uncertainty. When observation noise is high, the bot may quote around the wrong price and receive adverse fills.
 
@@ -93,9 +149,9 @@ probability = base_fill_probability * exp(-sensitivity * distance_from_true_mid)
 
 where:
 
-* `base_fill_probability` is the maximum baseline fill probability
-* `sensitivity` controls how quickly fill probability decays with distance
-* `distance_from_true_mid` measures how far the quote is from the true midprice
+- `base_fill_probability` is the maximum baseline fill probability
+- `sensitivity` controls how quickly fill probability decays with distance
+- `distance_from_true_mid` measures how far the quote is from the true midprice
 
 This captures the basic intuition:
 
@@ -128,8 +184,6 @@ ask_price = quote_mid_price + effective_spread / 2
 
 This strategy performs well when the observed price is accurate, but it can perform poorly when observations are noisy.
 
----
-
 ### 2. Inventory-Aware Strategy
 
 The inventory-aware strategy shifts its quote midpoint based on current inventory.
@@ -143,8 +197,6 @@ If inventory is positive, the bot is long. It shifts quotes downward to encourag
 If inventory is negative, the bot is short. It shifts quotes upward to encourage buying back and discourage selling more.
 
 This strategy reduces inventory exposure but does not directly protect against noisy price observations.
-
----
 
 ### 3. Uncertainty-Aware Strategy
 
@@ -169,8 +221,6 @@ jumpy observed prices   -> quote wider
 
 The bot does not know the true observation noise. It estimates uncertainty only from recent observed price movements.
 
----
-
 ### 4. Inventory-and-Uncertainty-Aware Strategy
 
 This strategy combines inventory-aware midpoint shifting with uncertainty-aware spread widening.
@@ -180,12 +230,7 @@ quote_mid_price = observed_mid_price - inventory_skew * inventory
 effective_spread = base_spread + uncertainty_sensitivity * estimated_uncertainty
 ```
 
-It attempts to manage both:
-
-* inventory risk
-* fair-value uncertainty
-
-This is currently the most robust strategy in the simulator.
+It attempts to manage both inventory risk and fair-value uncertainty.
 
 ---
 
@@ -195,14 +240,15 @@ Each strategy is evaluated over many simulation trials.
 
 The simulator tracks:
 
-* average PnL
-* PnL standard deviation
-* risk-adjusted score
-* average absolute inventory
-* maximum absolute inventory
-* total fills
-* average effective spread
-* estimated uncertainty
+- average PnL
+- PnL standard deviation
+- risk-adjusted score
+- average absolute inventory
+- maximum absolute inventory
+- total fills
+- average effective spread
+- average estimated uncertainty
+- average absolute observation error
 
 Final PnL is computed as:
 
@@ -241,6 +287,22 @@ strategies = [
 ]
 ```
 
+The current experiment uses Brownian motion price dynamics:
+
+```python
+price_process = "brownian"
+brownian_drift = 0.0
+brownian_volatility = 0.02
+dt = 1.0
+```
+
+The bot observes the true Brownian midprice with additional Gaussian observation noise. This separates two sources of uncertainty:
+
+1. **True market volatility**: the actual midprice is moving randomly.
+2. **Observation noise**: the bot's estimate of the midprice is imperfect.
+
+The uncertainty-aware strategy does not directly know either the true Brownian shock or the observation-noise standard deviation. It estimates uncertainty from recent observed price changes.
+
 Each strategy/noise combination is run over many trials, and the results are averaged.
 
 Experiment outputs are saved to:
@@ -269,8 +331,6 @@ As observation noise increases, fixed-spread strategies become vulnerable. They 
 
 The uncertainty-aware strategies avoid the worst high-noise losses by widening spreads and trading less frequently.
 
----
-
 ### Risk-Adjusted Score
 
 ![Risk-Adjusted Score by Strategy and Observation Noise](results/plots/risk_adjusted_score_by_noise.png)
@@ -280,8 +340,6 @@ The risk-adjusted score penalizes inventory exposure.
 Inventory-aware quoting performs well when observation noise is low because it captures spread while keeping inventory smaller than the fixed strategy.
 
 At higher noise levels, uncertainty-aware strategies perform much better than fixed-spread strategies. The combined inventory-and-uncertainty-aware strategy is the most robust because it controls both inventory exposure and noisy-observation risk.
-
----
 
 ### Average Inventory Exposure
 
@@ -293,8 +351,6 @@ The inventory-aware strategy significantly reduces inventory exposure compared t
 
 The combined strategy has the lowest average inventory exposure at higher noise levels because it both adjusts quotes based on inventory and widens spreads when observed prices become unstable.
 
----
-
 ### Maximum Inventory Exposure
 
 ![Maximum Inventory Exposure by Strategy and Observation Noise](results/plots/max_inventory_by_noise.png)
@@ -304,8 +360,6 @@ Maximum inventory exposure is important because large positions can create large
 The fixed strategy reaches the largest inventory positions. Inventory-aware and combined strategies keep maximum inventory much lower.
 
 The combined strategy has the best inventory-risk control overall.
-
----
 
 ### Average Total Fills
 
@@ -317,8 +371,6 @@ At high noise, frequent fills often indicate adverse selection: the bot is getti
 
 Uncertainty-aware strategies sharply reduce fill counts as noise increases. By widening spreads, they avoid many bad trades.
 
----
-
 ### Average Effective Spread
 
 ![Average Effective Spread by Strategy and Observation Noise](results/plots/avg_spread_by_noise.png)
@@ -327,7 +379,17 @@ Fixed and inventory-aware strategies always use the same base spread.
 
 Uncertainty-aware strategies increase their effective spread as observed price movements become more volatile. This confirms that the uncertainty-estimation mechanism is behaving as intended.
 
-Even at zero observation noise, the uncertainty-aware spread is slightly above the base spread because the true price itself still moves randomly. The bot estimates uncertainty from observed price changes, so it captures both true price volatility and observation noise.
+Even at zero observation noise, the uncertainty-aware spread is slightly above the base spread because the true Brownian midprice still moves randomly. The bot estimates uncertainty from observed price changes, so it captures both true price volatility and observation noise.
+
+### Sample True vs Observed Midprice Path
+
+![Sample True vs Observed Midprice Path](results/plots/sample_true_vs_observed_midprice.png)
+
+This plot shows one simulated Brownian midprice path together with the noisy midprice observed by the bot.
+
+The true midprice is the hidden market value used by the simulator to determine whether quotes are favorable or unfavorable. The observed midprice is the noisy signal used by the bot to place quotes.
+
+This distinction is important because the bot does not trade using perfect information. When the observed midprice deviates from the true midprice, the bot may quote around the wrong value and receive adverse fills.
 
 ---
 
@@ -361,85 +423,55 @@ This is still a simplified simulator.
 
 Current limitations include:
 
-* no real limit order book yet
-* no price-time priority
-* no order sizes beyond one unit
-* no transaction fees
-* no latency
-* no competing market makers
-* no informed traders explicitly modeled
-* simple random-walk price process
-* simplified exponential fill-probability model
-* no calibration to real market data
+- no real limit order book yet
+- no price-time priority
+- no order sizes beyond one unit
+- no transaction fees
+- no latency
+- no competing market makers
+- no explicitly modeled informed traders
+- simplified exponential fill-probability model
+- no calibration to real market data
 
 These limitations are intentional at the current stage. The goal is to first build a clear strategy-testing framework before adding market microstructure complexity.
 
 ---
 
-## Future Work
-
-Planned improvements include:
-
-1. **Refactor the project structure**
-
-   * separate simulator, strategies, fill model, statistics, and experiments into different modules
-
-2. **Add better stochastic price models**
-
-   * Brownian motion
-   * Ornstein-Uhlenbeck mean reversion
-   * regime-switching volatility
-
-3. **Add Poisson order arrivals**
-
-   * model buy and sell market orders as stochastic arrival processes
-
-4. **Build a simplified limit order book**
-
-   * bids and asks
-   * price-time priority
-   * limit orders
-   * market orders
-   * cancellations
-
-5. **Add competing agents**
-
-   * noise traders
-   * informed traders
-   * other market makers
-
-6. **Optimize strategy parameters**
-
-   * grid search over spreads, inventory skew, and uncertainty sensitivity
-   * maximize a risk-adjusted objective
-
-7. **Add a dashboard**
-
-   * interactive controls for spread, noise, inventory skew, and uncertainty sensitivity
-   * live plots of PnL, inventory, fills, and spreads
-
----
-
 ## How to Run
 
-Clone the repository and install dependencies:
+Create and activate a virtual environment:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Run the experiment:
+Install dependencies:
 
 ```bash
-python3 src/toy_simulator.py
+python3 -m pip install -r requirements.txt
 ```
 
-This will generate:
+Run the main experiment:
+
+```bash
+python3 -m src.main
+```
+
+This generates:
 
 ```text
 results/experiment_results.csv
 results/plots/
 ```
+
+Run the test suite:
+
+```bash
+python3 -m pytest
+```
+
+The current test suite covers the fill model, strategy logic, statistics helpers, simulator output structure, and price process dispatching.
 
 ---
 
@@ -448,23 +480,69 @@ results/plots/
 Current stage:
 
 ```text
-Phase 2: Experiment results and visualization
+Phase 4: Modular simulator with Brownian motion, plots, and tests
 ```
 
 Completed:
 
-* toy market-making simulator
-* quote-distance-based fill probability
-* inventory-aware quoting
-* noisy price observations
-* uncertainty-aware spread adjustment
-* multi-trial experiments
-* CSV result export
-* strategy comparison plots
+- modular project structure
+- toy market-making simulator
+- quote-distance-based fill probability
+- inventory-aware quoting
+- noisy price observations
+- uncertainty-aware spread adjustment
+- arithmetic Brownian motion price process
+- multi-trial experiments
+- CSV result export
+- strategy comparison plots
+- sample true vs observed midprice plot
+- unit tests for fill model, strategies, statistics helpers, simulator output, and price processes
 
 Next steps:
 
-* write cleaner project structure
-* improve stochastic models
-* add tests
-* build a simplified limit order book
+- remove legacy toy-simulator dependency
+- add volatility-regime experiments
+- optimize strategy parameters with grid search
+- add additional stochastic price models, such as mean reversion or regime switching
+- eventually add a simplified limit order book
+- optionally build an interactive dashboard after the simulation core is stronger
+
+---
+
+## Future Work
+
+Planned improvements include:
+
+1. **Volatility-regime experiments**
+
+   - vary true Brownian volatility separately from observation noise
+   - compare how strategies perform in calm versus volatile markets
+
+2. **Parameter optimization**
+
+   - grid search over base spread, inventory skew, uncertainty sensitivity, and volatility window
+   - maximize a risk-adjusted objective rather than manually choosing parameters
+
+3. **Additional stochastic price models**
+
+   - Ornstein-Uhlenbeck mean reversion
+   - regime-switching volatility
+   - jump processes
+
+4. **More realistic order flow**
+
+   - Poisson buy and sell market-order arrivals
+   - explicit informed-trader or adverse-selection events
+
+5. **Simplified limit order book**
+
+   - bids and asks
+   - price-time priority
+   - market orders
+   - limit orders
+   - cancellations
+
+6. **Interactive dashboard**
+
+   - controls for price process, volatility, observation noise, spread, inventory skew, and uncertainty sensitivity
+   - plots of PnL, inventory, fills, spreads, and sample price paths
