@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 
@@ -8,7 +9,42 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 
 INPUT_PATH = RESULTS_DIR / "regime_parameter_optimization_results.csv"
 OUTPUT_PATH = RESULTS_DIR / "fill_constrained_best_parameters.csv"
+PLOTS_DIR = RESULTS_DIR / "plots"
 
+def save_fill_constraint_plot(summary_df):
+    """
+    Saves a plot showing how the best risk-adjusted score changes as the
+    minimum fill requirement increases.
+    """
+
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    feasible_df = summary_df[summary_df["feasible"] == True]
+
+    plt.figure(figsize=(10, 6))
+
+    for regime in feasible_df["regime"].unique():
+        regime_df = feasible_df[feasible_df["regime"] == regime]
+
+        plt.plot(
+            regime_df["minimum_avg_fills"],
+            regime_df["avg_risk_adjusted_score"],
+            marker="o",
+            label=regime,
+        )
+
+    plt.xlabel("Minimum Average Fills Required")
+    plt.ylabel("Best Average Risk-Adjusted Score")
+    plt.title("Liquidity Constraint vs Risk-Adjusted Performance")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "fill_constraint_tradeoff.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
 
 def analyze_fill_constrained_parameters():
     """
@@ -102,6 +138,8 @@ def analyze_fill_constrained_parameters():
     print("Fill-Constrained Best Parameters")
     print("--------------------------------")
     print(summary_df.to_string(index=False))
+
+    save_fill_constraint_plot(summary_df)
 
     return summary_df
 
