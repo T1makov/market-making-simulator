@@ -284,3 +284,96 @@ def generate_optimization_plots(df):
     plt.close()
 
     print(f"Saved plot: {output_path}")
+def generate_regime_optimization_plots(df):
+    """
+    Generates plots showing the best optimized parameters by market regime.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    regime_order = [
+        "calm_clean",
+        "volatile_clean",
+        "calm_noisy",
+        "volatile_noisy",
+    ]
+
+    best_df = (
+        df.sort_values(
+            by="avg_risk_adjusted_score",
+            ascending=False,
+        )
+        .drop_duplicates(subset=["regime"], keep="first")
+        .set_index("regime")
+        .loc[regime_order]
+        .reset_index()
+    )
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["avg_risk_adjusted_score"],
+    )
+    plt.xlabel("Best Average Risk-Adjusted Score")
+    plt.ylabel("Market Regime")
+    plt.title("Best Risk-Adjusted Score by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_score_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["base_spread"],
+    )
+    plt.xlabel("Best Base Spread")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Base Spread by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_base_spread_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["inventory_skew"],
+    )
+    plt.xlabel("Best Inventory Skew")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Inventory Skew by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_inventory_skew_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["uncertainty_sensitivity"],
+    )
+    plt.xlabel("Best Uncertainty Sensitivity")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Uncertainty Sensitivity by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_uncertainty_sensitivity_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
