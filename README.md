@@ -261,6 +261,12 @@ The dashboard allows users to change simulation parameters, run individual simul
 
 ---
 
+## Dashboard Preview
+
+![Single Simulation Dashboard](docs/images/dashboard_single_simulation.png)
+
+![Saved Results Dashboard](docs/images/dashboard_saved_results.png)
+
 ## How to Run
 
 Install dependencies:
