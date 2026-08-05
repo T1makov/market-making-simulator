@@ -3,3 +3,5 @@ pandas
 matplotlib
 pytest
 tabulate
+streamlit
+altair
