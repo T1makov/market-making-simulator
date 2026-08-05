@@ -214,6 +214,61 @@ def run_strategy_comparison(
 
     return pd.DataFrame(rows)
 
+def run_preset_evaluation(
+    preset_df,
+    risk_penalty,
+    volatility_window,
+    random_walk_step_size,
+    brownian_drift,
+    dt,
+    num_steps,
+    num_trials,
+    seed,
+):
+    """
+    Evaluates each optimized regime preset on fresh simulations.
+
+    Each preset uses its optimized parameters and corresponding market regime.
+    """
+
+    random.seed(seed)
+
+    rows = []
+
+    for _, row in preset_df.iterrows():
+        summary = run_trials_for_strategy(
+            base_spread=float(row["base_spread"]),
+            num_steps=num_steps,
+            num_trials=num_trials,
+            strategy="inventory_and_uncertainty_aware",
+            inventory_skew=float(row["inventory_skew"]),
+            observation_noise_std=float(row["observation_noise_std"]),
+            risk_penalty=risk_penalty,
+            uncertainty_sensitivity=float(row["uncertainty_sensitivity"]),
+            volatility_window=volatility_window,
+            price_process="brownian",
+            random_walk_step_size=random_walk_step_size,
+            brownian_drift=brownian_drift,
+            brownian_volatility=float(row["brownian_volatility"]),
+            dt=dt,
+        )
+
+        result_row = {
+            "regime": row["regime"],
+            "base_spread": float(row["base_spread"]),
+            "inventory_skew": float(row["inventory_skew"]),
+            "uncertainty_sensitivity": float(
+                row["uncertainty_sensitivity"]
+            ),
+            "brownian_volatility": float(row["brownian_volatility"]),
+            "observation_noise_std": float(row["observation_noise_std"]),
+            **summary,
+        }
+
+        rows.append(result_row)
+
+    return pd.DataFrame(rows)
+
 def display_saved_plot(filename, caption):
     """
     Displays a saved plot from results/plots if it exists.
@@ -432,10 +487,11 @@ with st.sidebar:
     )
 
 
-tab_sample, tab_compare, tab_results = st.tabs(
+tab_sample, tab_compare, tab_presets, tab_results = st.tabs(
     [
         "Single Simulation",
         "Strategy Comparison",
+        "Preset Evaluation",
         "Saved Results",
     ]
 )
@@ -586,6 +642,93 @@ with tab_compare:
         st.subheader("Average Effective Spread")
         st.bar_chart(chart_df["avg_effective_spread"])
 
+with tab_presets:
+    st.subheader("Optimized Preset Evaluation")
+
+    st.write(
+        """
+        This evaluates the optimized regime presets on fresh simulations.
+        Each preset uses the best parameters found for its market regime.
+        """
+    )
+
+    preset_df = load_best_parameters_by_regime()
+
+    if preset_df is None:
+        st.info(
+            "No optimized preset file found. Run "
+            "`python3 -m src.analyze_regime_results` first."
+        )
+    else:
+        st.dataframe(
+            preset_df[
+                [
+                    "regime",
+                    "base_spread",
+                    "inventory_skew",
+                    "uncertainty_sensitivity",
+                    "brownian_volatility",
+                    "observation_noise_std",
+                    "avg_risk_adjusted_score",
+                    "avg_total_fills",
+                ]
+            ],
+            use_container_width=True,
+        )
+
+        preset_num_trials = st.slider(
+            "Trials per preset",
+            min_value=10,
+            max_value=1000,
+            value=200,
+            step=10,
+        )
+
+        preset_eval_button = st.button("Evaluate Optimized Presets")
+
+        if preset_eval_button:
+            preset_eval_df = run_preset_evaluation(
+                preset_df=preset_df,
+                risk_penalty=risk_penalty,
+                volatility_window=volatility_window,
+                random_walk_step_size=random_walk_step_size,
+                brownian_drift=brownian_drift,
+                dt=dt,
+                num_steps=num_steps,
+                num_trials=preset_num_trials,
+                seed=seed,
+            )
+
+            st.subheader("Fresh Evaluation Results")
+
+            st.dataframe(
+                preset_eval_df,
+                use_container_width=True,
+            )
+
+            chart_df = preset_eval_df.set_index("regime")
+
+            st.subheader("Risk-Adjusted Score by Preset")
+            st.bar_chart(chart_df["avg_risk_adjusted_score"])
+
+            st.subheader("Average PnL by Preset")
+            st.bar_chart(chart_df["avg_pnl"])
+
+            st.subheader("Average Inventory by Preset")
+            st.bar_chart(chart_df["avg_abs_inventory"])
+
+            st.subheader("Average Fills by Preset")
+            st.bar_chart(chart_df["avg_total_fills"])
+
+            csv_data = preset_eval_df.to_csv(index=False).encode("utf-8")
+
+            st.download_button(
+                label="Download preset evaluation as CSV",
+                data=csv_data,
+                file_name="preset_evaluation_results.csv",
+                mime="text/csv",
+            )
+            
 with tab_results:
     st.subheader("Saved Results and Analysis")
 
