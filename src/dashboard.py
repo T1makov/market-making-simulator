@@ -214,7 +214,34 @@ def run_strategy_comparison(
 
     return pd.DataFrame(rows)
 
+def display_saved_plot(filename, caption):
+    """
+    Displays a saved plot from results/plots if it exists.
+    """
 
+    plot_path = RESULTS_DIR / "plots" / filename
+
+    if plot_path.exists():
+        st.image(
+            str(plot_path),
+            caption=caption,
+            use_container_width=True,
+        )
+    else:
+        st.warning(f"Missing plot: {plot_path}")
+
+
+def load_results_csv(filename):
+    """
+    Loads a CSV from the results directory.
+    """
+
+    csv_path = RESULTS_DIR / filename
+
+    if not csv_path.exists():
+        return None
+
+    return pd.read_csv(csv_path)
 st.title("Stochastic Market-Making Simulator")
 
 st.write(
@@ -405,10 +432,11 @@ with st.sidebar:
     )
 
 
-tab_sample, tab_compare = st.tabs(
+tab_sample, tab_compare, tab_results = st.tabs(
     [
         "Single Simulation",
         "Strategy Comparison",
+        "Saved Results",
     ]
 )
 
@@ -557,3 +585,123 @@ with tab_compare:
 
         st.subheader("Average Effective Spread")
         st.bar_chart(chart_df["avg_effective_spread"])
+
+with tab_results:
+    st.subheader("Saved Results and Analysis")
+
+    st.write(
+        """
+        This tab shows the saved outputs from the larger experiment scripts.
+        Use it to inspect generated CSVs, plots, and the analysis summary
+        without leaving the dashboard.
+        """
+    )
+
+    analysis_path = RESULTS_DIR / "analysis_summary.md"
+
+    st.markdown("### Analysis Summary")
+
+    if analysis_path.exists():
+        with st.expander("Open generated analysis summary", expanded=False):
+            st.markdown(analysis_path.read_text())
+    else:
+        st.info(
+            "No analysis summary found. Run "
+            "`python3 -m src.analysis_report` first."
+        )
+
+    st.markdown("### Saved Plots")
+
+    plot_options = {
+        "Sample true vs observed midprice": (
+            "sample_true_vs_observed_midprice.png",
+            "Sample True vs Observed Midprice Path",
+        ),
+        "Average PnL by observation noise": (
+            "avg_pnl_by_noise.png",
+            "Average PnL by Observation Noise",
+        ),
+        "Risk-adjusted score by observation noise": (
+            "risk_adjusted_score_by_noise.png",
+            "Risk-Adjusted Score by Observation Noise",
+        ),
+        "Average PnL by volatility": (
+            "avg_pnl_by_volatility.png",
+            "Average PnL by Brownian Volatility",
+        ),
+        "Risk-adjusted score by volatility": (
+            "risk_adjusted_score_by_volatility.png",
+            "Risk-Adjusted Score by Brownian Volatility",
+        ),
+        "Estimated uncertainty by volatility": (
+            "estimated_uncertainty_by_volatility.png",
+            "Estimated Uncertainty by Brownian Volatility",
+        ),
+        "Top parameter sets": (
+            "top_parameter_sets.png",
+            "Top Parameter Sets by Risk-Adjusted Score",
+        ),
+        "Best score by regime": (
+            "best_score_by_regime.png",
+            "Best Risk-Adjusted Score by Regime",
+        ),
+        "Best uncertainty sensitivity by regime": (
+            "best_uncertainty_sensitivity_by_regime.png",
+            "Best Uncertainty Sensitivity by Regime",
+        ),
+        "Fill constraint tradeoff": (
+            "fill_constraint_tradeoff.png",
+            "Liquidity Constraint vs Risk-Adjusted Performance",
+        ),
+    }
+
+    selected_plots = st.multiselect(
+        "Choose plots to display",
+        options=list(plot_options.keys()),
+        default=[
+            "Sample true vs observed midprice",
+            "Risk-adjusted score by volatility",
+            "Top parameter sets",
+            "Fill constraint tradeoff",
+        ],
+    )
+
+    for plot_name in selected_plots:
+        filename, caption = plot_options[plot_name]
+        display_saved_plot(filename, caption)
+
+    st.markdown("### Saved CSV Results")
+
+    csv_options = {
+        "Observation-noise experiment": "experiment_results.csv",
+        "Volatility-regime experiment": "volatility_experiment_results.csv",
+        "Parameter optimization": "parameter_optimization_results.csv",
+        "Regime parameter optimization": "regime_parameter_optimization_results.csv",
+        "Best parameters by regime": "best_parameters_by_regime.csv",
+        "Fill-constrained best parameters": "fill_constrained_best_parameters.csv",
+    }
+
+    selected_csv_label = st.selectbox(
+        "Choose a results CSV",
+        options=list(csv_options.keys()),
+    )
+
+    selected_csv_filename = csv_options[selected_csv_label]
+    selected_csv_df = load_results_csv(selected_csv_filename)
+
+    if selected_csv_df is None:
+        st.info(f"No file found: `results/{selected_csv_filename}`")
+    else:
+        st.dataframe(
+            selected_csv_df,
+            use_container_width=True,
+        )
+
+        csv_data = selected_csv_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="Download selected CSV",
+            data=csv_data,
+            file_name=selected_csv_filename,
+            mime="text/csv",
+        )
