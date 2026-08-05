@@ -32,6 +32,36 @@ STRATEGIES = [
     "inventory_and_uncertainty_aware",
 ]
 
+STRATEGY_DESCRIPTIONS = {
+    "fixed": """
+    Quotes a fixed spread around the observed midprice.
+
+    This is the simplest strategy. It does not adjust for inventory risk or
+    uncertainty, so it can perform well in clean markets but may be vulnerable
+    when observations are noisy.
+    """,
+    "inventory_aware": """
+    Shifts quotes based on current inventory.
+
+    If the strategy is long inventory, it shifts quotes downward to encourage
+    selling. If it is short inventory, it shifts quotes upward to encourage
+    buying back.
+    """,
+    "uncertainty_aware": """
+    Widens the spread when recent observed price changes become more volatile.
+
+    This helps the strategy avoid bad fills when the fair-value estimate is
+    unreliable.
+    """,
+    "inventory_and_uncertainty_aware": """
+    Combines inventory-aware quote shifting with uncertainty-aware spread
+    widening.
+
+    This strategy tries to manage both inventory risk and noisy fair-value
+    estimation.
+    """,
+}
+
 
 DEFAULT_SETTINGS = {
     "seed": 42,
@@ -243,6 +273,28 @@ with st.sidebar:
     st.divider()
 
     st.header("Simulation Settings")
+    with st.expander("What do these settings mean?"):
+        st.markdown(
+            """
+            **Base spread** controls how wide the quoted bid/ask spread is before
+            uncertainty adjustments.
+
+            **Inventory skew** controls how strongly the strategy shifts quotes to
+            reduce inventory exposure.
+
+            **Observation noise std** controls how noisy the bot's observed
+            midprice is relative to the true midprice.
+
+            **Risk penalty** controls how much the risk-adjusted score penalizes
+            carrying inventory.
+
+            **Uncertainty sensitivity** controls how aggressively the strategy
+            widens spreads when recent observed price changes are volatile.
+
+            **Brownian volatility** controls how much the true market midprice
+            moves each step.
+            """
+        )
 
     seed = st.number_input(
         "Random seed",
@@ -373,6 +425,8 @@ with tab_sample:
             index=3,
         )
 
+        st.info(STRATEGY_DESCRIPTIONS[strategy])
+        
         run_button = st.button("Run Single Simulation")
 
     if run_button:
@@ -478,6 +532,13 @@ with tab_compare:
         st.dataframe(
             comparison_df,
             use_container_width=True,
+        )
+        csv_data = comparison_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download comparison results as CSV",
+            data=csv_data,
+            file_name="strategy_comparison_results.csv",
+            mime="text/csv",
         )
 
         chart_df = comparison_df.set_index("strategy")
