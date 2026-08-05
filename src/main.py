@@ -1,5 +1,5 @@
-from .experiments import run_uncertainty_experiment
+from .experiments import run_all_experiments
+
 
 if __name__ == "__main__":
-    run_uncertainty_experiment()
-    
+    run_all_experiments()

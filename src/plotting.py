@@ -142,3 +142,238 @@ def save_price_path_plot(
     plt.close()
 
     print(f"Saved plot: {output_path}")
+def save_volatility_metric_plot(df, metric, ylabel, title, filename):
+    """
+    Saves one line plot for a specific metric.
+
+    The x-axis is Brownian volatility.
+    Each line is one strategy.
+    """
+
+    plt.figure(figsize=(10, 6))
+
+    for strategy in df["strategy"].unique():
+        strategy_df = df[df["strategy"] == strategy]
+
+        plt.plot(
+            strategy_df["brownian_volatility"],
+            strategy_df[metric],
+            marker="o",
+            label=strategy,
+        )
+
+    plt.xlabel("Brownian Volatility")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / filename
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+
+def generate_volatility_plots(df):
+    """
+    Generates and saves plots from the volatility-regime experiment.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_pnl",
+        ylabel="Average PnL",
+        title="Average PnL by Strategy and Brownian Volatility",
+        filename="avg_pnl_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_risk_adjusted_score",
+        ylabel="Average Risk-Adjusted Score",
+        title="Risk-Adjusted Score by Strategy and Brownian Volatility",
+        filename="risk_adjusted_score_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_abs_inventory",
+        ylabel="Average Absolute Inventory",
+        title="Average Inventory Exposure by Strategy and Brownian Volatility",
+        filename="avg_inventory_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_max_abs_inventory",
+        ylabel="Average Max Absolute Inventory",
+        title="Maximum Inventory Exposure by Strategy and Brownian Volatility",
+        filename="max_inventory_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_total_fills",
+        ylabel="Average Total Fills",
+        title="Average Total Fills by Strategy and Brownian Volatility",
+        filename="fills_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_effective_spread",
+        ylabel="Average Effective Spread",
+        title="Average Effective Spread by Strategy and Brownian Volatility",
+        filename="avg_spread_by_volatility.png",
+    )
+
+    save_volatility_metric_plot(
+        df=df,
+        metric="avg_estimated_uncertainty",
+        ylabel="Average Estimated Uncertainty",
+        title="Estimated Uncertainty by Strategy and Brownian Volatility",
+        filename="estimated_uncertainty_by_volatility.png",
+    )
+def generate_optimization_plots(df):
+    """
+    Generates plots for the parameter optimization experiment.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    top_df = df.sort_values(
+        by="avg_risk_adjusted_score",
+        ascending=False,
+    ).head(10)
+
+    top_df = top_df.copy()
+
+    top_df["parameter_set"] = (
+        "spread="
+        + top_df["base_spread"].astype(str)
+        + ", skew="
+        + top_df["inventory_skew"].astype(str)
+        + ", sens="
+        + top_df["uncertainty_sensitivity"].astype(str)
+    )
+
+    # Reverse so the best parameter set appears at the top of the horizontal bar chart.
+    top_df = top_df.iloc[::-1]
+
+    plt.figure(figsize=(12, 7))
+
+    plt.barh(
+        top_df["parameter_set"],
+        top_df["avg_risk_adjusted_score"],
+    )
+
+    plt.xlabel("Average Risk-Adjusted Score")
+    plt.ylabel("Parameter Set")
+    plt.title("Top 10 Parameter Sets by Risk-Adjusted Score")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "top_parameter_sets.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+def generate_regime_optimization_plots(df):
+    """
+    Generates plots showing the best optimized parameters by market regime.
+    """
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    PLOTS_DIR.mkdir(exist_ok=True)
+
+    regime_order = [
+        "calm_clean",
+        "volatile_clean",
+        "calm_noisy",
+        "volatile_noisy",
+    ]
+
+    best_df = (
+        df.sort_values(
+            by="avg_risk_adjusted_score",
+            ascending=False,
+        )
+        .drop_duplicates(subset=["regime"], keep="first")
+        .set_index("regime")
+        .loc[regime_order]
+        .reset_index()
+    )
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["avg_risk_adjusted_score"],
+    )
+    plt.xlabel("Best Average Risk-Adjusted Score")
+    plt.ylabel("Market Regime")
+    plt.title("Best Risk-Adjusted Score by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_score_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["base_spread"],
+    )
+    plt.xlabel("Best Base Spread")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Base Spread by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_base_spread_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["inventory_skew"],
+    )
+    plt.xlabel("Best Inventory Skew")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Inventory Skew by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_inventory_skew_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(
+        best_df["regime"],
+        best_df["uncertainty_sensitivity"],
+    )
+    plt.xlabel("Best Uncertainty Sensitivity")
+    plt.ylabel("Market Regime")
+    plt.title("Optimized Uncertainty Sensitivity by Market Regime")
+    plt.grid(True, axis="x")
+    plt.tight_layout()
+
+    output_path = PLOTS_DIR / "best_uncertainty_sensitivity_by_regime.png"
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"Saved plot: {output_path}")
