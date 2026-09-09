@@ -99,6 +99,16 @@ DEFAULT_SETTINGS = {
 for key, value in DEFAULT_SETTINGS.items():
     st.session_state.setdefault(key, value)
 
+# Counts how many times each "Run" button has been pressed, so repeated
+# presses advance the random seed instead of replaying the exact same
+# simulation every time.
+for run_count_key in [
+    "single_simulation_run_count",
+    "strategy_comparison_run_count",
+    "preset_evaluation_run_count",
+]:
+    st.session_state.setdefault(run_count_key, 0)
+
 
 @st.cache_data
 def load_best_parameters_by_regime():
@@ -726,6 +736,9 @@ with tab_sample:
         run_button = st.button("Run Single Simulation")
 
     if run_button:
+        st.session_state["single_simulation_run_count"] += 1
+        run_seed = seed + st.session_state["single_simulation_run_count"]
+
         result = run_sample_simulation(
             strategy=strategy,
             base_spread=base_spread,
@@ -740,7 +753,7 @@ with tab_sample:
             brownian_volatility=brownian_volatility,
             dt=dt,
             num_steps=num_steps,
-            seed=seed,
+            seed=run_seed,
         )
 
         with col_left:
@@ -813,6 +826,9 @@ with tab_compare:
     compare_button = st.button("Run Strategy Comparison")
 
     if compare_button:
+        st.session_state["strategy_comparison_run_count"] += 1
+        run_seed = seed + st.session_state["strategy_comparison_run_count"]
+
         comparison_df = run_strategy_comparison(
             base_spread=base_spread,
             inventory_skew=inventory_skew,
@@ -827,7 +843,7 @@ with tab_compare:
             dt=dt,
             num_steps=num_steps,
             num_trials=num_trials,
-            seed=seed,
+            seed=run_seed,
         )
 
         display_comparison_df = comparison_df.copy()
@@ -913,6 +929,9 @@ with tab_presets:
         preset_eval_button = st.button("Evaluate Optimized Presets")
 
         if preset_eval_button:
+            st.session_state["preset_evaluation_run_count"] += 1
+            run_seed = seed + st.session_state["preset_evaluation_run_count"]
+
             preset_eval_df = run_preset_evaluation(
                 preset_df=preset_df,
                 risk_penalty=risk_penalty,
@@ -922,7 +941,7 @@ with tab_presets:
                 dt=dt,
                 num_steps=num_steps,
                 num_trials=preset_num_trials,
-                seed=seed,
+                seed=run_seed,
             )
 
             st.subheader("Fresh Evaluation Results")
