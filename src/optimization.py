@@ -115,6 +115,8 @@ def run_parameter_optimization():
         ascending=False,
     )
 
+    Path("results").mkdir(exist_ok=True)
+
     output_path = "results/parameter_optimization_results.csv"
     df.to_csv(output_path, index=False)
 
@@ -135,6 +137,13 @@ def run_parameter_optimization():
         "avg_total_fills",
         "avg_effective_spread",
     ]
+
+    print(df[columns_to_show].head(10).to_string(index=False))
+
+    generate_optimization_plots(df)
+
+    return df
+
 
 def run_regime_parameter_optimization():
     """

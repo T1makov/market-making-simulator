@@ -78,36 +78,6 @@ def strategy_label(strategy_name):
 
     return STRATEGY_LABELS.get(strategy_name, strategy_name)
 
-STRATEGY_DESCRIPTIONS = {
-    "fixed": """
-    Quotes a fixed spread around the observed midprice.
-
-    This is the simplest strategy. It does not adjust for inventory risk or
-    uncertainty, so it can perform well in clean markets but may be vulnerable
-    when observations are noisy.
-    """,
-    "inventory_aware": """
-    Shifts quotes based on current inventory.
-
-    If the strategy is long inventory, it shifts quotes downward to encourage
-    selling. If it is short inventory, it shifts quotes upward to encourage
-    buying back.
-    """,
-    "uncertainty_aware": """
-    Widens the spread when recent observed price changes become more volatile.
-
-    This helps the strategy avoid bad fills when the fair-value estimate is
-    unreliable.
-    """,
-    "inventory_and_uncertainty_aware": """
-    Combines inventory-aware quote shifting with uncertainty-aware spread
-    widening.
-
-    This strategy tries to manage both inventory risk and noisy fair-value
-    estimation.
-    """,
-}
-
 
 DEFAULT_SETTINGS = {
     "seed": 42,
@@ -259,6 +229,59 @@ def run_strategy_comparison(
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+def run_preset_evaluation(
+    preset_df,
+    risk_penalty,
+    volatility_window,
+    random_walk_step_size,
+    brownian_drift,
+    dt,
+    num_steps,
+    num_trials,
+    seed,
+):
+    """
+    Evaluates each optimized regime preset on fresh simulations.
+    """
+
+    random.seed(seed)
+
+    rows = []
+
+    for _, row in preset_df.iterrows():
+        summary = run_trials_for_strategy(
+            base_spread=float(row["base_spread"]),
+            num_steps=num_steps,
+            num_trials=num_trials,
+            strategy="inventory_and_uncertainty_aware",
+            inventory_skew=float(row["inventory_skew"]),
+            observation_noise_std=float(row["observation_noise_std"]),
+            risk_penalty=risk_penalty,
+            uncertainty_sensitivity=float(row["uncertainty_sensitivity"]),
+            volatility_window=volatility_window,
+            price_process="brownian",
+            random_walk_step_size=random_walk_step_size,
+            brownian_drift=brownian_drift,
+            brownian_volatility=float(row["brownian_volatility"]),
+            dt=dt,
+        )
+
+        row_result = {
+            "regime": row["regime"],
+            "base_spread": float(row["base_spread"]),
+            "inventory_skew": float(row["inventory_skew"]),
+            "uncertainty_sensitivity": float(row["uncertainty_sensitivity"]),
+            "brownian_volatility": float(row["brownian_volatility"]),
+            "observation_noise_std": float(row["observation_noise_std"]),
+            **summary,
+        }
+
+        rows.append(row_result)
+
+    return pd.DataFrame(rows)
+
 
 def create_price_path_chart(result):
     """
@@ -461,28 +484,6 @@ with st.sidebar:
 
             **Brownian volatility** controls how much the true simulated market
             midprice moves each step.
-            """
-        )
-    with st.expander("What do these settings mean?"):
-        st.markdown(
-            """
-            **Base spread** controls how wide the quoted bid/ask spread is before
-            uncertainty adjustments.
-
-            **Inventory skew** controls how strongly the strategy shifts quotes to
-            reduce inventory exposure.
-
-            **Observation noise std** controls how noisy the bot's observed
-            midprice is relative to the true midprice.
-
-            **Risk penalty** controls how much the risk-adjusted score penalizes
-            carrying inventory.
-
-            **Uncertainty sensitivity** controls how aggressively the strategy
-            widens spreads when recent observed price changes are volatile.
-
-            **Brownian volatility** controls how much the true market midprice
-            moves each step.
             """
         )
 

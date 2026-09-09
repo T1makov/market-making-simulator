@@ -50,7 +50,7 @@ def evaluate_optimized_parameters():
     print("--------------------------------------------")
     print(f"Steps per simulation: {num_steps}")
     print(f"Trials per regime: {num_trials}")
-    print(f"Random seed: 999")
+    print("Random seed: 999")
     print()
 
     for _, row in optimized_df.iterrows():

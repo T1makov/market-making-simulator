@@ -335,7 +335,6 @@ python3 -m streamlit run src/dashboard.py
 
 ```text
 src/
-  __init__.py
   main.py
   experiments.py
   simulator.py

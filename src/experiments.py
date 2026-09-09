@@ -235,6 +235,10 @@ def run_uncertainty_experiment():
         dt=dt,
         record_history=True,
     )
+
+    save_price_path_plot(sample_path_result)
+
+
 def print_volatility_summary_row(volatility, strategy_name, inventory_skew, summary):
     """
     Prints one row of the volatility-regime experiment table.
