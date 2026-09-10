@@ -93,6 +93,10 @@ DEFAULT_SETTINGS = {
     "brownian_drift": 0.0,
     "brownian_volatility": 0.02,
     "dt": 1.0,
+    "observation_model": "gaussian_noise",
+    "fill_model_type": "probability",
+    "base_market_spread": 0.05,
+    "volatility_linked_width": 0.5,
 }
 
 
@@ -156,6 +160,10 @@ def run_sample_simulation(
     dt,
     num_steps,
     seed,
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
 ):
     """
     Runs one simulation and records the true and observed midprice paths.
@@ -178,6 +186,10 @@ def run_sample_simulation(
         brownian_volatility=brownian_volatility,
         dt=dt,
         record_history=True,
+        observation_model=observation_model,
+        fill_model_type=fill_model_type,
+        base_market_spread=base_market_spread,
+        volatility_linked_width=volatility_linked_width,
     )
 
 
@@ -196,6 +208,10 @@ def run_strategy_comparison(
     num_steps,
     num_trials,
     seed,
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
 ):
     """
     Runs a multi-trial comparison across all strategies.
@@ -228,6 +244,10 @@ def run_strategy_comparison(
             brownian_drift=brownian_drift,
             brownian_volatility=brownian_volatility,
             dt=dt,
+            observation_model=observation_model,
+            fill_model_type=fill_model_type,
+            base_market_spread=base_market_spread,
+            volatility_linked_width=volatility_linked_width,
         )
 
         row = {
@@ -251,6 +271,10 @@ def run_preset_evaluation(
     num_steps,
     num_trials,
     seed,
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
 ):
     """
     Evaluates each optimized regime preset on fresh simulations.
@@ -276,6 +300,10 @@ def run_preset_evaluation(
             brownian_drift=brownian_drift,
             brownian_volatility=float(row["brownian_volatility"]),
             dt=dt,
+            observation_model=observation_model,
+            fill_model_type=fill_model_type,
+            base_market_spread=base_market_spread,
+            volatility_linked_width=volatility_linked_width,
         )
 
         row_result = {
@@ -605,6 +633,57 @@ with st.sidebar:
         key="dt",
     )
 
+    st.header("Observation & Fill Model")
+
+    observation_model = st.selectbox(
+        "Observation model",
+        options=["gaussian_noise", "market_quote"],
+        format_func=lambda value: {
+            "gaussian_noise": "Gaussian noise (default)",
+            "market_quote": "Simulated market quote",
+        }[value],
+        key="observation_model",
+    )
+
+    fill_model_type = st.selectbox(
+        "Fill model",
+        options=["probability", "orderbook"],
+        format_func=lambda value: {
+            "probability": "Probability curve (default)",
+            "orderbook": "Order-book crossing",
+        }[value],
+        key="fill_model_type",
+    )
+
+    base_market_spread = st.slider(
+        "Base market spread",
+        min_value=0.01,
+        max_value=0.50,
+        step=0.01,
+        key="base_market_spread",
+        help=(
+            "Width of the simulated public bid/ask used by the "
+            "'Simulated market quote' observation model and/or the "
+            "'Order-book crossing' fill model."
+        ),
+    )
+
+    volatility_linked_width = st.slider(
+        "Volatility-linked width",
+        min_value=0.0,
+        max_value=2.0,
+        step=0.1,
+        key="volatility_linked_width",
+        help=(
+            "How much the simulated public spread widens as recent "
+            "observed price changes become more volatile. Under the "
+            "'Simulated market quote' observation model this feeds back on "
+            "itself (a wider quote produces noisier observations, which "
+            "widen the next quote), so values much above 2.0 can blow up "
+            "numerically -- this range stays comfortably stable."
+        ),
+    )
+
 
 tab_story, tab_sample, tab_compare, tab_presets, tab_results = st.tabs(
     [
@@ -754,6 +833,10 @@ with tab_sample:
             dt=dt,
             num_steps=num_steps,
             seed=run_seed,
+            observation_model=observation_model,
+            fill_model_type=fill_model_type,
+            base_market_spread=base_market_spread,
+            volatility_linked_width=volatility_linked_width,
         )
 
         with col_left:
@@ -844,6 +927,10 @@ with tab_compare:
             num_steps=num_steps,
             num_trials=num_trials,
             seed=run_seed,
+            observation_model=observation_model,
+            fill_model_type=fill_model_type,
+            base_market_spread=base_market_spread,
+            volatility_linked_width=volatility_linked_width,
         )
 
         display_comparison_df = comparison_df.copy()
@@ -942,6 +1029,10 @@ with tab_presets:
                 num_steps=num_steps,
                 num_trials=preset_num_trials,
                 seed=run_seed,
+                observation_model=observation_model,
+                fill_model_type=fill_model_type,
+                base_market_spread=base_market_spread,
+                volatility_linked_width=volatility_linked_width,
             )
 
             st.subheader("Fresh Evaluation Results")

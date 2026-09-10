@@ -7,12 +7,22 @@ from .experiments import run_trials_for_strategy
 from .plotting import generate_optimization_plots, generate_regime_optimization_plots
 
 
-def run_parameter_optimization():
+def run_parameter_optimization(
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
+):
     """
     Runs a grid search over market-making strategy parameters.
 
     The goal is to find parameter combinations that maximize average
     risk-adjusted score under a fixed market environment.
+
+    observation_model and fill_model_type default to the original behavior
+    (unaffected grid search results); pass "market_quote" / "orderbook" to
+    run the same grid search against the simulated-market-quote model
+    instead (see simulator.py).
     """
 
     random.seed(456)
@@ -86,6 +96,10 @@ def run_parameter_optimization():
                     brownian_drift=brownian_drift,
                     brownian_volatility=brownian_volatility,
                     dt=dt,
+                    observation_model=observation_model,
+                    fill_model_type=fill_model_type,
+                    base_market_spread=base_market_spread,
+                    volatility_linked_width=volatility_linked_width,
                 )
 
                 row = {
@@ -145,12 +159,22 @@ def run_parameter_optimization():
     return df
 
 
-def run_regime_parameter_optimization():
+def run_regime_parameter_optimization(
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
+):
     """
     Runs parameter optimization separately across multiple market regimes.
 
     This tests whether the best market-making parameters depend on the
     underlying market environment.
+
+    observation_model and fill_model_type default to the original behavior
+    (unaffected grid search results); pass "market_quote" / "orderbook" to
+    run the same grid search against the simulated-market-quote model
+    instead (see simulator.py).
     """
 
     random.seed(789)
@@ -258,6 +282,10 @@ def run_regime_parameter_optimization():
                         brownian_drift=brownian_drift,
                         brownian_volatility=brownian_volatility,
                         dt=dt,
+                        observation_model=observation_model,
+                        fill_model_type=fill_model_type,
+                        base_market_spread=base_market_spread,
+                        volatility_linked_width=volatility_linked_width,
                     )
 
                     row = {

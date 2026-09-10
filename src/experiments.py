@@ -32,9 +32,18 @@ def run_trials_for_strategy(
     brownian_drift,
     brownian_volatility,
     dt,
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
 ):
     """
     Runs many simulations for one strategy under one noise level.
+
+    observation_model and fill_model_type default to the original Gaussian-
+    noise observation model and probability-curve fill model, so existing
+    callers keep reproducing identical results unless they opt into the
+    simulated-market-quote alternatives (see simulator.py).
     """
 
     results = []
@@ -54,6 +63,10 @@ def run_trials_for_strategy(
             brownian_drift=brownian_drift,
             brownian_volatility=brownian_volatility,
             dt=dt,
+            observation_model=observation_model,
+            fill_model_type=fill_model_type,
+            base_market_spread=base_market_spread,
+            volatility_linked_width=volatility_linked_width,
         )
         results.append(result)
 

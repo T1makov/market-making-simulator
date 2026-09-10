@@ -27,3 +27,24 @@ def fill_probability(distance_from_true_mid):
     probability = min(1.0, probability)
 
     return probability
+
+
+def orderbook_fill(bot_bid_price, bot_ask_price, market_bid, market_ask):
+    """
+    Returns (bot_buys, bot_sells) as booleans for this step.
+
+    bot_buys: the bot's bid crosses or meets the simulated public ask, so the
+    bot buys.
+
+    bot_sells: the bot's ask crosses or meets the simulated public bid, so
+    the bot sells.
+
+    Unlike fill_probability(), this is a deterministic "would this actually
+    trade" crossing check against a simulated public bid/ask market rather
+    than a hand-tuned probability curve. It has no randomness of its own.
+    """
+
+    bot_buys = bot_bid_price >= market_ask
+    bot_sells = bot_ask_price <= market_bid
+
+    return bot_buys, bot_sells

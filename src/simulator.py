@@ -1,6 +1,7 @@
 import random
 
-from .fill_model import fill_probability
+from .fill_model import fill_probability, orderbook_fill
+from .market_quote import generate_market_quote, observed_mid_from_market_quote
 from .sim_stats import estimate_uncertainty
 from .strategies import choose_effective_spread, choose_quote_mid_price
 from .price_process import next_price
@@ -21,9 +22,34 @@ def run_simulation(
     brownian_volatility=0.02,
     dt=1.0,
     record_history=False,
+    observation_model="gaussian_noise",
+    fill_model_type="probability",
+    base_market_spread=0.05,
+    volatility_linked_width=0.5,
 ):
     """
     Runs one simulation of the market-making bot.
+
+    observation_model:
+        "gaussian_noise" (default) -- the bot observes the true midprice plus
+        unbounded Gaussian noise, as before.
+
+        "market_quote" -- the bot instead observes a point drawn uniformly
+        from within a simulated public bid/ask market (see market_quote.py),
+        which naturally bounds the observation error by the public spread.
+
+    fill_model_type:
+        "probability" (default) -- fills are decided by fill_probability(),
+        a hand-tuned probability curve based on distance from the true
+        midprice, as before.
+
+        "orderbook" -- fills are instead decided by a deterministic crossing
+        check (orderbook_fill()) against the same simulated public bid/ask
+        market used by "market_quote".
+
+    observation_model and fill_model_type are independent switches: any
+    combination of the two is valid (e.g. "gaussian_noise" observation with
+    "orderbook" fills).
     """
 
     initial_price = 100.00
@@ -57,9 +83,38 @@ def run_simulation(
             brownian_volatility=brownian_volatility,
             dt=dt,
         )
-        # 2. The bot observes the true price with noise.
-        observation_noise = random.gauss(0.0, observation_noise_std)
-        observed_mid_price = true_mid_price + observation_noise
+
+        # 2. Optionally simulate a public bid/ask "market" around the true
+        # midprice. This is generated whenever either the observation model
+        # or the fill model needs it, using the volatility estimated from
+        # observed price changes so far (i.e. not including this step's own
+        # observation, which hasn't happened yet).
+        market_bid = None
+        market_ask = None
+
+        if observation_model == "market_quote" or fill_model_type == "orderbook":
+            recent_volatility_estimate = estimate_uncertainty(
+                recent_observed_price_changes
+            )
+
+            market_bid, market_ask = generate_market_quote(
+                true_mid_price=true_mid_price,
+                base_market_spread=base_market_spread,
+                volatility_linked_width=volatility_linked_width,
+                recent_volatility_estimate=recent_volatility_estimate,
+            )
+
+        # 3. The bot observes the market.
+        if observation_model == "gaussian_noise":
+            observation_noise = random.gauss(0.0, observation_noise_std)
+            observed_mid_price = true_mid_price + observation_noise
+        elif observation_model == "market_quote":
+            observed_mid_price = observed_mid_from_market_quote(
+                market_bid, market_ask
+            )
+            observation_noise = observed_mid_price - true_mid_price
+        else:
+            raise ValueError(f"Unknown observation model: {observation_model}")
 
         if record_history:
             true_mid_price_history.append(true_mid_price)
@@ -67,7 +122,7 @@ def run_simulation(
 
         sum_abs_observation_error += abs(observation_noise)
 
-        # 3. Update recent observed price changes.
+        # 4. Update recent observed price changes.
         if previous_observed_mid_price is not None:
             observed_price_change = observed_mid_price - previous_observed_mid_price
             recent_observed_price_changes.append(observed_price_change)
@@ -77,10 +132,10 @@ def run_simulation(
 
         previous_observed_mid_price = observed_mid_price
 
-        # 4. Estimate uncertainty from recent observed price changes.
+        # 5. Estimate uncertainty from recent observed price changes.
         estimated_uncertainty = estimate_uncertainty(recent_observed_price_changes)
 
-        # 5. Choose the center of the bot's bid/ask quotes.
+        # 6. Choose the center of the bot's bid/ask quotes.
         quote_mid_price = choose_quote_mid_price(
             strategy=strategy,
             observed_mid_price=observed_mid_price,
@@ -88,7 +143,7 @@ def run_simulation(
             inventory_skew=inventory_skew,
         )
 
-        # 6. Choose the spread.
+        # 7. Choose the spread.
         effective_spread = choose_effective_spread(
             strategy=strategy,
             base_spread=base_spread,
@@ -96,30 +151,44 @@ def run_simulation(
             uncertainty_sensitivity=uncertainty_sensitivity,
         )
 
-        # 7. Place bid and ask around the chosen quote midpoint.
+        # 8. Place bid and ask around the chosen quote midpoint.
         bid_price = quote_mid_price - effective_spread / 2
         ask_price = quote_mid_price + effective_spread / 2
 
-        # 8. Fills depend on the TRUE midprice, not the bot's observed price.
-        bid_distance = true_mid_price - bid_price
-        ask_distance = ask_price - true_mid_price
+        # 9. Decide whether the bid and/or ask get filled.
+        if fill_model_type == "probability":
+            # Fills depend on the TRUE midprice, not the bot's observed price.
+            bid_distance = true_mid_price - bid_price
+            ask_distance = ask_price - true_mid_price
 
-        prob_someone_sells_to_us = fill_probability(bid_distance)
-        prob_someone_buys_from_us = fill_probability(ask_distance)
+            prob_someone_sells_to_us = fill_probability(bid_distance)
+            prob_someone_buys_from_us = fill_probability(ask_distance)
 
-        # 9. Someone sells to us, so we buy at our bid.
-        if random.random() < prob_someone_sells_to_us:
+            bot_buys = random.random() < prob_someone_sells_to_us
+            bot_sells = random.random() < prob_someone_buys_from_us
+        elif fill_model_type == "orderbook":
+            bot_buys, bot_sells = orderbook_fill(
+                bot_bid_price=bid_price,
+                bot_ask_price=ask_price,
+                market_bid=market_bid,
+                market_ask=market_ask,
+            )
+        else:
+            raise ValueError(f"Unknown fill model type: {fill_model_type}")
+
+        # 10. Someone sells to us, so we buy at our bid.
+        if bot_buys:
             inventory += 1
             cash -= bid_price
             buy_fills += 1
 
-        # 10. Someone buys from us, so we sell at our ask.
-        if random.random() < prob_someone_buys_from_us:
+        # 11. Someone buys from us, so we sell at our ask.
+        if bot_sells:
             inventory -= 1
             cash += ask_price
             sell_fills += 1
 
-        # 11. Track risk and strategy behavior.
+        # 12. Track risk and strategy behavior.
         max_abs_inventory = max(max_abs_inventory, abs(inventory))
         sum_abs_inventory += abs(inventory)
         sum_effective_spread += effective_spread
