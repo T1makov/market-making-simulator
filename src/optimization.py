@@ -10,7 +10,7 @@ from .plotting import generate_optimization_plots, generate_regime_optimization_
 def run_parameter_optimization(
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """
@@ -162,7 +162,7 @@ def run_parameter_optimization(
 def run_regime_parameter_optimization(
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """

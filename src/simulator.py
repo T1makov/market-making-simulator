@@ -24,7 +24,7 @@ def run_simulation(
     record_history=False,
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """

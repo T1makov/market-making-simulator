@@ -26,10 +26,10 @@ def test_negative_distance_is_treated_like_zero_distance():
     assert negative_distance_probability == pytest.approx(zero_distance_probability)
 
 
-def test_orderbook_fill_bid_crosses_ask_does_not():
+def test_orderbook_fill_competitive_bid_uncompetitive_ask():
     bot_buys, bot_sells = orderbook_fill(
-        bot_bid_price=100.10,
-        bot_ask_price=100.20,
+        bot_bid_price=100.00,
+        bot_ask_price=100.10,
         market_bid=99.95,
         market_ask=100.05,
     )
@@ -38,10 +38,10 @@ def test_orderbook_fill_bid_crosses_ask_does_not():
     assert bot_sells is False
 
 
-def test_orderbook_fill_ask_crosses_bid_does_not():
+def test_orderbook_fill_competitive_ask_uncompetitive_bid():
     bot_buys, bot_sells = orderbook_fill(
-        bot_bid_price=99.80,
-        bot_ask_price=99.90,
+        bot_bid_price=99.90,
+        bot_ask_price=100.00,
         market_bid=99.95,
         market_ask=100.05,
     )
@@ -50,7 +50,8 @@ def test_orderbook_fill_ask_crosses_bid_does_not():
     assert bot_sells is True
 
 
-def test_orderbook_fill_neither_crosses():
+def test_orderbook_fill_neither_side_is_competitive():
+    # The bot quotes wider than the public market on both sides.
     bot_buys, bot_sells = orderbook_fill(
         bot_bid_price=99.90,
         bot_ask_price=100.10,
@@ -62,10 +63,11 @@ def test_orderbook_fill_neither_crosses():
     assert bot_sells is False
 
 
-def test_orderbook_fill_both_cross():
+def test_orderbook_fill_both_sides_are_competitive():
+    # The bot quotes tighter than the public market on both sides.
     bot_buys, bot_sells = orderbook_fill(
-        bot_bid_price=100.10,
-        bot_ask_price=99.90,
+        bot_bid_price=100.00,
+        bot_ask_price=100.00,
         market_bid=99.95,
         market_ask=100.05,
     )
@@ -74,10 +76,10 @@ def test_orderbook_fill_both_cross():
     assert bot_sells is True
 
 
-def test_orderbook_fill_exact_equality_counts_as_crossing():
+def test_orderbook_fill_exact_equality_counts_as_competitive():
     bot_buys, bot_sells = orderbook_fill(
-        bot_bid_price=100.05,
-        bot_ask_price=99.95,
+        bot_bid_price=99.95,
+        bot_ask_price=100.05,
         market_bid=99.95,
         market_ask=100.05,
     )

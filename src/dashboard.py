@@ -95,7 +95,7 @@ DEFAULT_SETTINGS = {
     "dt": 1.0,
     "observation_model": "gaussian_noise",
     "fill_model_type": "probability",
-    "base_market_spread": 0.05,
+    "base_market_spread": 0.15,
     "volatility_linked_width": 0.5,
 }
 
@@ -162,7 +162,7 @@ def run_sample_simulation(
     seed,
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """
@@ -210,7 +210,7 @@ def run_strategy_comparison(
     seed,
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """
@@ -273,7 +273,7 @@ def run_preset_evaluation(
     seed,
     observation_model="gaussian_noise",
     fill_model_type="probability",
-    base_market_spread=0.05,
+    base_market_spread=0.15,
     volatility_linked_width=0.5,
 ):
     """
