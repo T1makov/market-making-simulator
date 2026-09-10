@@ -499,44 +499,28 @@ with st.sidebar:
 
     st.header("Simulation Settings")
 
-    with st.expander("What do these settings mean?"):
-        st.markdown(
-            """
-            **Base spread** controls the default width between the bid and ask
-            quotes.
-
-            **Inventory skew** controls how strongly the strategy shifts quotes to
-            reduce inventory exposure.
-
-            **Observation noise std** controls how inaccurate the bot's observed
-            midprice is relative to the true midprice.
-
-            **Risk penalty** controls how much the risk-adjusted score penalizes
-            holding inventory.
-
-            **Uncertainty sensitivity** controls how aggressively the strategy
-            widens its spread when recent observed price changes become volatile.
-
-            **Volatility window** controls how many recent observed price changes
-            are used to estimate uncertainty.
-
-            **Brownian volatility** controls how much the true simulated market
-            midprice moves each step.
-            """
-        )
-
     seed = st.number_input(
         "Random seed",
         min_value=0,
         max_value=100000,
         step=1,
         key="seed",
+        help=(
+            "Seeds Python's random number generator so a run is "
+            "reproducible. Each press of a 'Run' button still advances "
+            "from this seed, so repeated runs vary."
+        ),
     )
 
     price_process = st.selectbox(
         "Price process",
         options=["brownian", "random_walk"],
         key="price_process",
+        help=(
+            "The stochastic process driving the true midprice: Brownian "
+            "motion (drift + volatility) or a simple fixed-size up/down "
+            "random walk."
+        ),
     )
 
     num_steps = st.slider(
@@ -545,6 +529,7 @@ with st.sidebar:
         max_value=5000,
         step=100,
         key="num_steps",
+        help="Number of time steps simulated. More steps means a longer price history but a slower run.",
     )
 
     base_spread = st.slider(
@@ -553,6 +538,7 @@ with st.sidebar:
         max_value=0.50,
         step=0.01,
         key="base_spread",
+        help="Width of the bid/ask spread the bot quotes around its center price, before any uncertainty-based widening.",
     )
 
     inventory_skew = st.slider(
@@ -562,6 +548,7 @@ with st.sidebar:
         step=0.001,
         format="%.3f",
         key="inventory_skew",
+        help="How strongly inventory-aware strategies shift their quotes to reduce inventory exposure.",
     )
 
     observation_noise_std = st.slider(
@@ -570,6 +557,11 @@ with st.sidebar:
         max_value=0.30,
         step=0.01,
         key="observation_noise_std",
+        help=(
+            "Standard deviation of the Gaussian noise added to the true "
+            "midprice to produce the bot's observed midprice. Only used "
+            "by the 'Gaussian noise' observation model."
+        ),
     )
 
     risk_penalty = st.slider(
@@ -578,6 +570,7 @@ with st.sidebar:
         max_value=10.0,
         step=0.5,
         key="risk_penalty",
+        help="How much the risk-adjusted score penalizes holding inventory.",
     )
 
     uncertainty_sensitivity = st.slider(
@@ -586,6 +579,7 @@ with st.sidebar:
         max_value=10.0,
         step=0.5,
         key="uncertainty_sensitivity",
+        help="How aggressively uncertainty-aware strategies widen their spread as recent observed price changes become more volatile.",
     )
 
     volatility_window = st.slider(
@@ -594,6 +588,7 @@ with st.sidebar:
         max_value=200,
         step=5,
         key="volatility_window",
+        help="How many recent observed price changes are used to estimate uncertainty.",
     )
 
     st.header("Price Process Parameters")
@@ -605,6 +600,7 @@ with st.sidebar:
         step=0.001,
         format="%.3f",
         key="random_walk_step_size",
+        help="Fixed step size for each up/down move of the random-walk price process.",
     )
 
     brownian_drift = st.slider(
@@ -614,6 +610,7 @@ with st.sidebar:
         step=0.005,
         format="%.3f",
         key="brownian_drift",
+        help="Average directional drift per step of the Brownian motion price process.",
     )
 
     brownian_volatility = st.slider(
@@ -623,6 +620,7 @@ with st.sidebar:
         step=0.001,
         format="%.3f",
         key="brownian_volatility",
+        help="How much the true simulated market midprice moves each step under Brownian motion.",
     )
 
     dt = st.slider(
@@ -631,6 +629,7 @@ with st.sidebar:
         max_value=5.0,
         step=0.1,
         key="dt",
+        help="Length of one simulated time step, used by the Brownian motion price process.",
     )
 
     st.header("Observation & Fill Model")
@@ -643,6 +642,11 @@ with st.sidebar:
             "market_quote": "Simulated market quote",
         }[value],
         key="observation_model",
+        help=(
+            "How the bot's observed midprice is generated: unbounded "
+            "Gaussian noise around the true price, or a point drawn from "
+            "a simulated public bid/ask."
+        ),
     )
 
     fill_model_type = st.selectbox(
@@ -653,6 +657,11 @@ with st.sidebar:
             "orderbook": "Order-book crossing",
         }[value],
         key="fill_model_type",
+        help=(
+            "How fills are decided: a hand-tuned probability curve based "
+            "on distance from the true price, or a deterministic crossing "
+            "check against a simulated public bid/ask."
+        ),
     )
 
     base_market_spread = st.slider(
