@@ -253,6 +253,8 @@ def run_strategy_comparison(
         row = {
             "strategy": strategy_name,
             "inventory_skew": strategy_inventory_skew,
+            "observation_model": observation_model,
+            "fill_model_type": fill_model_type,
             **summary,
         }
 
@@ -313,6 +315,8 @@ def run_preset_evaluation(
             "uncertainty_sensitivity": float(row["uncertainty_sensitivity"]),
             "brownian_volatility": float(row["brownian_volatility"]),
             "observation_noise_std": float(row["observation_noise_std"]),
+            "observation_model": observation_model,
+            "fill_model_type": fill_model_type,
             **summary,
         }
 
@@ -733,9 +737,11 @@ with tab_story:
         At each time step:
 
         1. The true midprice moves according to a stochastic price process.
-        2. The bot observes a noisy version of the true midprice.
+        2. The bot observes the market, using whichever observation model is
+           selected below.
         3. The selected strategy chooses a bid and ask quote.
-        4. The simulator determines whether the bid or ask gets filled.
+        4. The simulator determines whether the bid or ask gets filled, using
+           whichever fill model is selected below.
         5. Cash, inventory, PnL, and risk metrics are updated.
 
         The bot does **not** directly observe the true midprice. It quotes
@@ -749,6 +755,39 @@ with tab_story:
     for strategy_name in STRATEGIES:
         st.markdown(f"**{strategy_label(strategy_name)}**")
         st.markdown(STRATEGY_DESCRIPTIONS[strategy_name])
+
+    st.markdown("### Observation & Fill Models")
+
+    st.markdown(
+        """
+        Independently of which strategy is selected, two switches in the
+        sidebar (under "Observation & Fill Model") control how the bot
+        perceives the market and how its quotes get filled. Both default to
+        the original behavior, and any combination of the two is valid.
+
+        **Observation models**
+
+        - **Gaussian noise (default)**: the bot observes the true midprice
+          plus unbounded Gaussian noise.
+        - **Simulated market quote**: the bot instead observes a point drawn
+          uniformly from within a simulated public bid/ask quote, which
+          widens automatically as recent observed price changes become more
+          volatile. The observation error is naturally bounded by that
+          quote's width, unlike the unbounded Gaussian case.
+
+        **Fill models**
+
+        - **Probability curve (default)**: fills are a coin flip, weighted by
+          a hand-tuned probability curve based on distance from the true
+          midprice.
+        - **Order-book crossing**: fills are decided deterministically by
+          whether the bot's bid/ask is priced at least as competitively as
+          the simulated public bid/ask. Strategies that widen their spread a
+          lot (uncertainty-aware strategies, especially in volatile periods)
+          will naturally see fewer fills under this model, since they are
+          less often the most competitive quote in the market.
+        """
+    )
 
     st.markdown("### Experiments Implemented")
 
@@ -793,7 +832,9 @@ with tab_story:
         """
         This is still a simplified simulator. It does not yet include:
 
-        - a real limit order book
+        - a real limit order book (the order-book crossing fill model uses a
+          single simulated public bid/ask, not a full book with depth or
+          queue position)
         - queue position
         - real historical bid/ask quote data
         - exchange fees or rebates
@@ -887,6 +928,8 @@ with tab_sample:
                 "observed_mid_price_history",
             ]
         }
+        result_without_history["observation_model"] = observation_model
+        result_without_history["fill_model_type"] = fill_model_type
 
         st.dataframe(
             pd.DataFrame([result_without_history]),

@@ -26,8 +26,8 @@ This project explores those tradeoffs through simulation experiments, parameter 
 
 - Stochastic midprice simulation
 - Brownian motion price process
-- Noisy observed midprice signal
-- Probabilistic fill model
+- Two selectable observation models: Gaussian noise around the true midprice, or a point drawn from a simulated public bid/ask
+- Two selectable fill models: a hand-tuned probability curve, or deterministic order-book crossing against the simulated public bid/ask
 - Inventory and cash accounting
 - Mark-to-market PnL calculation
 - Risk-adjusted scoring
@@ -71,14 +71,79 @@ This strategy manages both inventory risk and noisy fair-value estimation.
 
 ---
 
+## Observation & Fill Models
+
+Independently of which quoting strategy is selected, the simulator supports two
+switches that control how the bot perceives the market and how its quotes get
+filled. Both default to the original behavior, and any combination of the two
+is valid.
+
+### Observation Models
+
+**Gaussian noise (default)**
+
+The bot observes `true_mid_price + Gaussian noise`, where the noise's standard
+deviation is the `observation_noise_std` parameter. The error is unbounded --
+a large enough draw can push the observed price arbitrarily far from the true
+price.
+
+**Simulated market quote**
+
+The bot instead observes a point drawn uniformly from within a simulated
+public bid/ask quote (`src/market_quote.py`). That public quote is centered on
+the true midprice, with a width of `base_market_spread` plus
+`volatility_linked_width` times the recently estimated volatility of observed
+price changes -- so the public spread widens automatically when the market
+gets choppier. Because the observation is drawn from inside this quote, the
+observation error is naturally bounded by the public spread's width, unlike
+the unbounded Gaussian case.
+
+Note: this observation model estimates volatility from its own past output,
+which creates a feedback loop (a wider quote produces a noisier observation,
+which widens the next quote). It stays stable for `volatility_linked_width`
+values up to roughly 2.0 (the dashboard slider is capped there); much higher
+values can diverge numerically.
+
+### Fill Models
+
+**Probability curve (default)**
+
+Fills are decided by `fill_probability()`: a hand-tuned exponential curve
+based on how far the bot's bid/ask sits from the *true* midprice. Closer
+quotes are more likely to fill, and the fill is a coin flip weighted by that
+probability.
+
+**Order-book crossing**
+
+Fills are instead decided by `orderbook_fill()`: a deterministic check against
+the same simulated public bid/ask quote used by the market-quote observation
+model. The bot's bid fills when it is priced at least as competitively as the
+public bid (`bot_bid_price >= market_bid`), and its ask fills when it is
+priced at least as competitively as the public ask
+(`bot_ask_price <= market_ask`) -- the standard "am I at the front of the
+book" check for a resting limit order. There is no randomness in this
+decision: whether a fill happens is fully determined by the quoted prices.
+
+Because this model rewards quoting *tighter* than the public market, strategies
+that widen their spread a lot (uncertainty-aware strategies, especially during
+volatile periods) will naturally see fewer fills under this model than under
+the probability curve -- that's expected, not a bug.
+
+Both switches are exposed in the dashboard sidebar under "Observation & Fill
+Model," and as optional keyword arguments (`observation_model`,
+`fill_model_type`, `base_market_spread`, `volatility_linked_width`) on
+`run_simulation()` and the experiment/optimization entry points that call it.
+
+---
+
 ## Core Simulation Loop
 
 At each time step:
 
 1. The true midprice moves according to a stochastic price process.
-2. The bot observes a noisy version of the true midprice.
+2. The bot observes the market, using whichever observation model is selected.
 3. The selected strategy chooses a bid and ask quote.
-4. The simulator determines whether the bid or ask gets filled.
+4. The simulator determines whether the bid or ask gets filled, using whichever fill model is selected.
 5. Cash, inventory, PnL, and risk metrics are updated.
 
 The bot does not directly observe the true midprice. It quotes using the observed midprice, while fills and final PnL are evaluated against the hidden true midprice.
@@ -257,7 +322,7 @@ Dashboard tabs:
 - Preset Evaluation
 - Saved Results
 
-The dashboard allows users to change simulation parameters, run individual simulations, compare strategies, evaluate optimized presets, and inspect saved experiment outputs.
+The dashboard allows users to change simulation parameters, run individual simulations, compare strategies, evaluate optimized presets, and inspect saved experiment outputs. The sidebar's "Observation & Fill Model" section lets you switch between the Gaussian-noise and simulated-market-quote observation models, and between the probability-curve and order-book-crossing fill models, and see the results update live. Every sidebar control has a small "?" icon next to its label -- hover it for a short explanation of that setting.
 
 ---
 
@@ -377,7 +442,7 @@ results/
 
 This is a simplified simulator. It does not yet include:
 
-- real limit order book data
+- real limit order book data (the order-book crossing fill model uses a single simulated public bid/ask, not a full book with depth or queue position)
 - queue position
 - historical bid/ask quote replay
 - exchange fees or rebates
@@ -397,7 +462,7 @@ Potential future improvements include:
 - using real quote/trade data
 - adding transaction fees and rebates
 - modeling latency
-- adding a more realistic order book
+- adding a more realistic order book, with real depth and queue position rather than a single simulated public bid/ask
 - testing adaptive strategies that learn parameters online
 - adding adverse-selection metrics
 - separating realized spread from mark-to-market PnL
