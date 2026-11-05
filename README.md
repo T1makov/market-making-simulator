@@ -334,6 +334,27 @@ The dashboard allows users to change simulation parameters, run individual simul
 
 ## How to Run
 
+### Deploy to Vercel
+
+Import the repository with the root directory set to `./` and the Container
+preset. The root Dockerfile runs the existing Streamlit dashboard on port 80,
+including the saved experiment results. No external database is required.
+
+Vercel manages the container lifecycle. Interactive session state is temporary;
+after a session expires, reconnect and rerun the simulation. Download generated
+CSV results if you want to keep them.
+
+To run the same container locally with Docker:
+
+```bash
+docker build -t market-making-simulator .
+docker run --rm -p 8501:80 market-making-simulator
+```
+
+Then open `http://localhost:8501`.
+
+### Local Python setup
+
 Install dependencies:
 
 ```bash
